@@ -1,0 +1,78 @@
+# ==========================================
+# SEGURIDAD Y CONFIGURACIÓN LOCAL
+# ==========================================
+.env
+.env.local
+.env.*.local
+*.bak
+*.orig
+
+# ==========================================
+# BACKEND (GO)
+# ==========================================
+# Binarios
+/backend/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Dependencias descargadas localmente (si se usa go mod vendor)
+/backend/vendor/
+
+# ==========================================
+# FRONTEND (ANGULAR / NODE)
+# ==========================================
+# Dependencias
+/frontend/node_modules/
+
+# Builds y compilados
+/frontend/dist/
+/frontend/tmp/
+/frontend/out-tsc/
+/frontend/bazel-out/
+
+# Caché de Angular
+/frontend/.angular/
+
+# Tests y reportes
+/frontend/coverage/
+/frontend/html-report/
+
+# Logs de Node
+npm-debug.log
+yarn-error.log
+yarn-debug.log
+
+# ==========================================
+# DOCKER Y DATOS LOCALES (Preventivo)
+# ==========================================
+# Ignorar carpetas locales de bases de datos si cambian el docker-compose
+/data/
+/mongo_data/
+/db_data/
+
+# ==========================================
+# SISTEMA OPERATIVO Y EDITORES (IDEs)
+# ==========================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editores (VSCode, IntelliJ, etc.)
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
