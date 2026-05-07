@@ -1,7 +1,4 @@
 # hsi-helpdesk
-
-# hsi-support-tickets
-
 Sistema de gestión de consultas, reclamos y solicitudes para usuarios de **Historia de Salud Integrada (HSI)** — Ministerio de Salud de La Rioja.
 
 Reemplaza la atención informal por WhatsApp con una plataforma trazable, con chatbot 24/7 y escalamiento a agentes humanos.
