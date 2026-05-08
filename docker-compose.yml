@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: hsi-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: hsi_tickets
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 5s
+      timeout: 10s
+      retries: 5
+      start_period: 5s
+    networks:
+      - hsi-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hsi-backend
+    ports:
+      - "8080:8080"
+    environment:
+      MONGO_URI: mongodb://mongodb:27017
+      MONGO_DB: hsi_tickets
+      SERVER_PORT: 8080
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - hsi-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  hsi-network:
+    driver: bridge
