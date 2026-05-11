@@ -1,4 +1,5 @@
-FROM golang:1.26.2-alpine AS builder
+
+FROM golang:1.26.3-alpine AS builder
 
 WORKDIR /app
 
@@ -10,9 +11,7 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o server ./cmd/server/main.go
 
-FROM alpine:latest
-
-RUN apk --no-cache add ca-certificates
+FROM gcr.io/distroless/static-debian12
 
 WORKDIR /root/
 
