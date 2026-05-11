@@ -25,7 +25,7 @@ services:
       dockerfile: Dockerfile
     container_name: hsi-backend
     ports:
-      - "8080:8080"
+      - "8085:8080"
     environment:
       MONGO_URI: mongodb://mongodb:27017
       MONGO_DB: hsi_tickets
