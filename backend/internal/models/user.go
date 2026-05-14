@@ -19,4 +19,5 @@ type User struct {
 	Role     string `bson:"role" json:"role"`
 	RealName string `bson:"real_name" json:"real_name"`
 	IsActive bool   `bson:"is_active" json:"is_active"`
+	DNI      string `bson:"dni,omitempty" json:"dni,omitempty"`
 }
