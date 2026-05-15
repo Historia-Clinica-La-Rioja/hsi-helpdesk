@@ -22,6 +22,11 @@ func main() {
 	ticketService := services.NewTicketService(ticketRepo)
 	ticketHandler := handlers.NewTicketHandler(ticketService)
 
+	//userRepo := repositories.NewUserRepository(db)
+	userRepo := repositories.NewMockUserRepository()
+	authService := services.NewAuthService(userRepo)
+	authHandler := handlers.NewAuthHandler(authService)
+
 	router := gin.Default()
 
 	// Ruta de prueba (Ping)
@@ -32,10 +37,14 @@ func main() {
 		})
 	})
 
-	// Rutas de tickets
 	api := router.Group("/api")
 	{
 		api.POST("/tickets", ticketHandler.CreateTicket)
+
+		auth := api.Group("/auth")
+		{
+			auth.POST("/login", authHandler.Login)
+		}
 	}
 
 	address := fmt.Sprintf(":%s", cfg.ServerPort)
