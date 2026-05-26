@@ -6,17 +6,27 @@ import (
 	"net/http"
 
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/config"
+	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/handlers"
+	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/repositories"
+	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/services"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
-	// 1. Cargar configuración
 	cfg := config.LoadConfig()
 
-	// 2. Conectar a Base de Datos
-	_ = config.ConnectDB(cfg)
+	client := config.ConnectDB(cfg)
+	db := client.Database(cfg.MongoDB)
 
-	// 3. Configurar Router (Gin)
+	ticketRepo := repositories.NewTicketRepository(db)
+	ticketService := services.NewTicketService(ticketRepo)
+	ticketHandler := handlers.NewTicketHandler(ticketService)
+
+	//userRepo := repositories.NewUserRepository(db)
+	userRepo := repositories.NewMockUserRepository()
+	authService := services.NewAuthService(userRepo)
+	authHandler := handlers.NewAuthHandler(authService)
+
 	router := gin.Default()
 
 	// Ruta de prueba (Ping)
@@ -27,7 +37,16 @@ func main() {
 		})
 	})
 
-	// 4. Iniciar Servidor
+	api := router.Group("/api")
+	{
+		api.POST("/tickets", ticketHandler.CreateTicket)
+
+		auth := api.Group("/auth")
+		{
+			auth.POST("/login", authHandler.Login)
+		}
+	}
+
 	address := fmt.Sprintf(":%s", cfg.ServerPort)
 	log.Printf("Servidor iniciado en el puerto %s", cfg.ServerPort)
 
