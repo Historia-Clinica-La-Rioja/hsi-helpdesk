@@ -19,9 +19,9 @@ type userRepository struct {
 }
 
 func NewUserRepository(db *mongo.Database) UserRepository {
-	return &userRepository{
-		collection: db.Collection("users"),
-	}
+    return &userRepository{
+        collection: db.Collection("UsersHSI"),
+    }
 }
 
 func (r *userRepository) FindByUsernameAndDNI(username, dni string) (*models.User, error) {
@@ -29,7 +29,7 @@ func (r *userRepository) FindByUsernameAndDNI(username, dni string) (*models.Use
 	defer cancel()
 
 	var user models.User
-	filter := bson.M{"username": username, "dni": dni}
+	filter := bson.M{"username": username, "identification_number": dni}
 	err := r.collection.FindOne(ctx, filter).Decode(&user)
 	if err != nil {
 		return nil, err
