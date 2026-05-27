@@ -22,8 +22,7 @@ func main() {
 	ticketService := services.NewTicketService(ticketRepo)
 	ticketHandler := handlers.NewTicketHandler(ticketService)
 
-	//userRepo := repositories.NewUserRepository(db)
-	userRepo := repositories.NewMockUserRepository()
+	userRepo := repositories.NewUserRepository(db)
 	authService := services.NewAuthService(userRepo)
 	authHandler := handlers.NewAuthHandler(authService)
 
