@@ -24,7 +24,6 @@ func NewTicketHandler(ticketService services.TicketService) *TicketHandler {
 type CreateTicketRequest struct {
 	Title       string `json:"title" binding:"required"`
 	Description string `json:"description" binding:"required"`
-	UserDNI     string `json:"user_dni" binding:"required"`
 	Institution string `json:"institution" binding:"required"`
 }
 
@@ -43,7 +42,6 @@ func (h *TicketHandler) CreateTicket(c *gin.Context) {
 		ID:          primitive.NewObjectID(),
 		Title:       req.Title,
 		Description: req.Description,
-		UserDNI:     req.UserDNI,
 		Institution: req.Institution,
 		Status:      models.StatusAbierto,
 		Messages:    []models.Message{},
