@@ -31,7 +31,7 @@ type Ticket struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	Title       string             `bson:"title" json:"title"`
 	Description string             `bson:"description" json:"description"`
-	UserDNI     string             `bson:"user_dni" json:"user_dni"`
+	UserID      string             `bson:"user_id" json:"user_id"`
 	Institution string             `bson:"institution" json:"institution"`
 	Status      string             `bson:"status" json:"status"`
 
