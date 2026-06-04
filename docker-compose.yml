@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   mongodb:
     image: mongo:7.0
@@ -20,21 +18,19 @@ services:
       - hsi-network
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: hsi-backend
-    ports:
-      - "8085:8080"
-    environment:
-      MONGO_URI: mongodb://mongodb:27017
-      MONGO_DB: SistemaDeTickets
-      SERVER_PORT: 8080
-    depends_on:
-      mongodb:
-        condition: service_healthy
-    networks:
-      - hsi-network
+      build:
+        context: ./backend
+        dockerfile: Dockerfile
+      container_name: hsi-backend
+      ports:
+        - "8083:8080"
+      env_file:          
+        - ./backend/.env  
+      environment:
+        # Borre las líneas de MONGO_URI y MONGO_DB para que use las del .env
+        SERVER_PORT: 8080
+      networks:
+        - hsi-network
 
 volumes:
   mongodb_data:

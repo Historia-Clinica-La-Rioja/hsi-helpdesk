@@ -1,63 +1,86 @@
 package services
 
 import (
-    "errors"
+	"errors"
+	"strings"
 
-    "github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/repositories"
-    "github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/pkg/jwt"
-    "golang.org/x/crypto/bcrypt"
+	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/repositories"
+	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/pkg/jwt"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthService interface {
-    AuthenticateUser(username, role, dni, password string) (string, error)
+	AuthenticateUser(username, role, dni, password string) (string, error)
 }
 
 type authService struct {
-    userRepo repositories.UserRepository
+	userRepo repositories.UserRepository
 }
 
 func NewAuthService(repo repositories.UserRepository) AuthService {
-    return &authService{userRepo: repo}
+	return &authService{userRepo: repo}
 }
 
 func (s *authService) AuthenticateUser(username, role, dni, password string) (string, error) {
-    switch role {
-    case "user", "USER":
-        if dni == "" {
-            return "", errors.New("el DNI es obligatorio para acceder como usuario")
-        }
+	// Normalizamos el rol para evitar problemas de mayúsculas
+	roleUpper := strings.ToUpper(role)
 
-        // Buscar coincidencia exacta de username y dni
-        user, err := s.userRepo.FindByUsernameAndDNI(username, dni)
-        if err != nil {
-            return "", errors.New("credenciales inválidas")
-        }
+	switch roleUpper {
+	case "USER":
+		if dni == "" {
+			return "", errors.New("el DNI es obligatorio para acceder como usuario")
+		}
 
-        return jwt.GenerateToken(user.ID.Hex(), user.Role)
+		user, err := s.userRepo.FindByUsernameAndDNI(username, dni)
+		if err != nil {
+			return "", errors.New("credenciales inválidas")
+		}
 
-    case "agent", "AGENT":
-        if password == "" {
-            return "", errors.New("la contraseña es obligatoria para acceder como agente")
-        }
+		return jwt.GenerateToken(user.ID.Hex(), user.Role)
 
-        user, err := s.userRepo.FindByUsername(username)
-        if err != nil {
-            return "", errors.New("credenciales inválidas")
-        }
+	case "AGENT", "OWNER":
+		if password == "" {
+			return "", errors.New("la contraseña es obligatoria para acceder como agente")
+		}
 
-        if user.Password == nil {
-            return "", errors.New("credenciales inválidas")
-        }
+		user, err := s.userRepo.FindByUsername(username)
+		if err != nil {
+			return "", errors.New("credenciales inválidas")
+		}
 
-        err = bcrypt.CompareHashAndPassword([]byte(*user.Password), []byte(password))
-        if err != nil {
-            return "", errors.New("credenciales inválidas")
-        }
+		if user.Password == nil {
+			return "", errors.New("el usuario no tiene una contraseña configurada")
+		}
 
-        // Generar JWT
-        return jwt.GenerateToken(user.ID.Hex(), user.Role)
+		dbPassword := *user.Password
 
-    default:
-        return "", errors.New("rol no válido")
-    }
+		// --- LÓGICA DE AUTO-MIGRACIÓN PARA TEXTO PLANO ---
+		// Los hashes de bcrypt siempre empiezan con $2a$
+		if !strings.HasPrefix(dbPassword, "$2a$") {
+			// Si no es hash, comparamos como texto plano
+			if dbPassword == password {
+				// Si coincide, generamos el hash y actualizamos la DB de forma silenciosa
+				hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+				if err == nil {
+					_ = s.userRepo.UpdatePassword(user.ID, string(hashedPassword))
+					// Actualizamos la variable local para que el flujo siga normal
+					dbPassword = string(hashedPassword)
+				}
+			} else {
+				return "", errors.New("credenciales inválidas")
+			}
+		}
+
+		// Verificación estándar con bcrypt
+		err = bcrypt.CompareHashAndPassword([]byte(dbPassword), []byte(password))
+		if err != nil {
+			return "", errors.New("credenciales inválidas")
+		}
+
+		// Generar JWT
+		return jwt.GenerateToken(user.ID.Hex(), user.Role)
+
+	default:
+		return "", errors.New("rol no válido")
+	}
 }
