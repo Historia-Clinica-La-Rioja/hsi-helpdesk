@@ -19,6 +19,11 @@ type LoginAgentRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
+// 3. Estructura para el SSO
+type LoginSSORequest struct {
+	Token string `json:"token" binding:"required"`
+}
+
 type AuthHandler struct {
 	authService services.AuthService
 }
@@ -27,7 +32,6 @@ func NewAuthHandler(authService services.AuthService) *AuthHandler {
 	return &AuthHandler{authService: authService}
 }
 
-// POST /api/auth/login/hsi
 func (h *AuthHandler) LoginHSI(c *gin.Context) {
 	var req LoginHSIRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -35,7 +39,6 @@ func (h *AuthHandler) LoginHSI(c *gin.Context) {
 		return
 	}
 
-	// el rol "user" directamente (el frontend ya no lo manda)
 	token, err := h.authService.AuthenticateUser(req.Username, "user", req.DNI, "")
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": err.Error()})
@@ -45,7 +48,6 @@ func (h *AuthHandler) LoginHSI(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "data": gin.H{"token": token}})
 }
 
-// Endpoint 2: POST /api/auth/login/agent
 func (h *AuthHandler) LoginAgent(c *gin.Context) {
 	var req LoginAgentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -53,7 +55,6 @@ func (h *AuthHandler) LoginAgent(c *gin.Context) {
 		return
 	}
 
-	// rol "agent" directamente
 	token, err := h.authService.AuthenticateUser(req.Username, "agent", "", req.Password)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": err.Error()})
@@ -63,7 +64,28 @@ func (h *AuthHandler) LoginAgent(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "data": gin.H{"token": token}})
 }
 
-// Logout /api/auth/logout
+// POST /api/auth/login/sso
+func (h *AuthHandler) LoginSSO(c *gin.Context) {
+	var req LoginSSORequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "El token de HSI es obligatorio"})
+		return
+	}
+
+	token, err := h.authService.AuthenticateSSO(req.Token, "user")
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data": gin.H{
+			"token": token,
+		},
+	})
+}
+
 func (h *AuthHandler) Logout(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",

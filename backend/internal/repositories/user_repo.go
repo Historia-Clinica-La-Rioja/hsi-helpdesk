@@ -14,6 +14,7 @@ type UserRepository interface {
 	FindByUsernameAndDNI(username, dni string) (*models.User, error)
 	FindByUsername(username string) (*models.User, error)
 	UpdatePassword(id primitive.ObjectID, newHash string) error
+	Create(user *models.User) (*models.User, error)
 }
 
 type userRepository struct {
@@ -52,7 +53,6 @@ func (r *userRepository) FindByUsername(username string) (*models.User, error) {
 	return &user, nil
 }
 
-// UpdatePassword permite actualizar la clave de texto plano a Hash de forma automática
 func (r *userRepository) UpdatePassword(id primitive.ObjectID, newHash string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -62,4 +62,18 @@ func (r *userRepository) UpdatePassword(id primitive.ObjectID, newHash string) e
 
 	_, err := r.collection.UpdateOne(ctx, filter, update)
 	return err
+}
+
+func (r *userRepository) Create(user *models.User) (*models.User, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	user.ID = primitive.NewObjectID()
+
+	_, err := r.collection.InsertOne(ctx, user)
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
 }
