@@ -23,7 +23,7 @@ func main() {
 	ticketHandler := handlers.NewTicketHandler(ticketService)
 
 	userRepo := repositories.NewUserRepository(db)
-	authService := services.NewAuthService(userRepo)
+	authService := services.NewAuthService(userRepo, cfg.HsiApiUrl)
 	authHandler := handlers.NewAuthHandler(authService)
 
 	router := gin.Default()
@@ -44,6 +44,7 @@ func main() {
 		{
 			auth.POST("/login/hsi", authHandler.LoginHSI)
 			auth.POST("/login/agent", authHandler.LoginAgent)
+			auth.POST("/login/sso", authHandler.LoginSSO)
 			auth.POST("/logout", authHandler.Logout)
 		}
 	}
