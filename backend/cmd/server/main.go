@@ -7,6 +7,7 @@ import (
 
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/config"
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/handlers"
+	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/middleware"
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/repositories"
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/services"
 	"github.com/gin-gonic/gin"
@@ -27,6 +28,9 @@ func main() {
 	authHandler := handlers.NewAuthHandler(authService)
 
 	router := gin.Default()
+
+	// Register CORS middleware
+	router.Use(middleware.CORS())
 
 	// Ruta de prueba
 	router.GET("/api/ping", func(c *gin.Context) {

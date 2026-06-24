@@ -8,7 +8,7 @@ import (
 )
 
 type TicketRepository interface {
-	Create(ticket models.Ticket) error
+	Create(Ticket models.Ticket) error
 }
 
 type ticketRepository struct {
@@ -17,7 +17,7 @@ type ticketRepository struct {
 
 func NewTicketRepository(db *mongo.Database) TicketRepository {
 	return &ticketRepository{
-		collection: db.Collection("tickets"),
+		collection: db.Collection("Tickets"),
 	}
 }
 
