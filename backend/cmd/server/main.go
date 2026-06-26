@@ -7,6 +7,7 @@ import (
 
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/config"
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/handlers"
+	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/middleware"
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/repositories"
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/services"
 	"github.com/gin-gonic/gin"
@@ -28,6 +29,9 @@ func main() {
 
 	router := gin.Default()
 
+	// Register CORS middleware
+	router.Use(middleware.CORS())
+
 	// Ruta de prueba
 	router.GET("/api/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -38,7 +42,23 @@ func main() {
 
 	api := router.Group("/api")
 	{
-		api.POST("/tickets", ticketHandler.CreateTicket)
+		tickets := api.Group("/tickets")
+		tickets.Use(middleware.AuthMiddleware())
+		{
+			tickets.POST("", ticketHandler.CreateTicket)
+			tickets.GET("", ticketHandler.GetTickets)
+			tickets.GET("/:id", ticketHandler.GetTicket)
+			tickets.PUT("/:id", ticketHandler.UpdateTicket)
+			tickets.PUT("/:id/status", ticketHandler.UpdateTicketStatus)
+			tickets.PUT("/:id/assign", ticketHandler.AssignTicket)
+			tickets.POST("/:id/messages", ticketHandler.AddMessage)
+		}
+
+		agents := api.Group("/agents")
+		agents.Use(middleware.AuthMiddleware())
+		{
+			agents.GET("", ticketHandler.GetAgents)
+		}
 
 		auth := api.Group("/auth")
 		{

@@ -102,7 +102,12 @@ func (s *authService) AuthenticateUser(username, role, dni, password string) (st
 		if err != nil {
 			return "", errors.New("credenciales inválidas")
 		}
-		return jwt.GenerateToken(user.ID.Hex(), user.Role)
+
+		role := user.Role
+		if role == "" {
+			role = "user"
+		}
+		return jwt.GenerateToken(user.ID.Hex(), role)
 
 	case "agent", "AGENT":
 		if password == "" {
