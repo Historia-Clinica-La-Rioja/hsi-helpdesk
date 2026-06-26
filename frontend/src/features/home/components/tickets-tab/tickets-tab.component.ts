@@ -197,10 +197,12 @@ import { AuthService } from '../../../../core/services/auth.service';
         <!-- List View (Mis Tickets) -->
         <div class="ticket-history-card">
           <div class="history-header">
-            <h2>Mis tickets</h2>
-            <button class="new-ticket-btn" (click)="setViewMode('create')">
-              + Nuevo ticket
-            </button>
+            <h2>{{ currentUserRole() === 'user' ? 'Mis tickets' : 'Tickets de soporte' }}</h2>
+            @if (currentUserRole() === 'user') {
+              <button class="new-ticket-btn" (click)="setViewMode('create')">
+                + Nuevo ticket
+              </button>
+            }
           </div>
           
           <div class="separator"></div>
@@ -209,18 +211,18 @@ import { AuthService } from '../../../../core/services/auth.service';
             @if (ticketsList().length === 0) {
               <div class="empty-state">
                 <span class="material-icons">confirmation_number</span>
-                <p>Aún no tenés tickets enviados.</p>
+                <p>{{ currentUserRole() === 'user' ? 'Aún no tenés tickets enviados.' : 'No se encontraron tickets de soporte.' }}</p>
               </div>
             } @else {
               @for (ticket of ticketsList(); track ticket.id) {
                 <div class="ticket-item" (click)="onSelectTicket(ticket)">
                   <div class="item-avatar">
-                    {{ getUserInitials() }}
+                    {{ getTicketUserInitials(ticket.user_id) }}
                   </div>
                   
                   <div class="item-content">
                     <div class="item-top-row">
-                      <span class="user-display-name">{{ getFirstName() }}</span>
+                      <span class="user-display-name" style="font-weight: 700; font-size: 15px;">{{ currentUserRole() === 'user' ? ticket.title : ticket.user_id }}</span>
                       
                       <!-- Status badge -->
                       <span class="status-badge" [ngClass]="ticket.status">
@@ -229,11 +231,17 @@ import { AuthService } from '../../../../core/services/auth.service';
                     </div>
 
                     <div class="item-meta-row">
+                      <span class="creator-name-text" style="font-weight: 600; color: var(--color-accent-teal);">Por {{ getTicketUserFirstName(ticket.user_id) }}</span>
+                      <span class="separator-dot" style="color: var(--color-border); margin: 0 4px;">•</span>
                       <span class="date-text">{{ ticket.created_at | date:'dd/MM/yyyy HH:mm' }}</span>
                       <span class="time-elapsed-pill">{{ getElapsedText(ticket.created_at) }}</span>
                     </div>
 
-                    <p class="body-preview">{{ ticket.description }}</p>
+                    @if (currentUserRole() === 'user') {
+                      <p class="body-preview">{{ ticket.description }}</p>
+                    } @else {
+                      <p class="body-preview"><strong style="color: var(--color-text-primary); font-weight: 600;">{{ ticket.title }}</strong> - {{ ticket.description }}</p>
+                    }
 
                     <div class="item-tags-row">
                       @for (t of ticket.tags; track t) {
@@ -310,6 +318,75 @@ import { AuthService } from '../../../../core/services/auth.service';
                   <p class="description-text">{{ ticket.description }}</p>
                 </div>
 
+                @if (currentUserRole() !== 'user') {
+                  <div class="admin-controls-card">
+                    <h4>Acciones de Soporte Técnico</h4>
+                    <div class="admin-actions-toolbar">
+                      <!-- Quick Status Buttons -->
+                      <div class="status-buttons-group">
+                        <span class="control-label">Cambiar Estado</span>
+                        <div class="btn-group">
+                          <button 
+                            type="button" 
+                            class="status-btn btn-abierto"
+                            [class.active]="ticket.status === 'abierto'"
+                            (click)="changeStatusQuick(ticket.id, 'abierto')"
+                          >
+                            Abierto
+                          </button>
+                          <button 
+                            type="button" 
+                            class="status-btn btn-progreso"
+                            [class.active]="ticket.status === 'en_progreso'"
+                            (click)="changeStatusQuick(ticket.id, 'en_progreso')"
+                          >
+                            En Progreso
+                          </button>
+                          <button 
+                            type="button" 
+                            class="status-btn btn-resuelto"
+                            [class.active]="ticket.status === 'resuelto'"
+                            (click)="changeStatusQuick(ticket.id, 'resuelto')"
+                          >
+                            Resuelto
+                          </button>
+                          <button 
+                            type="button" 
+                            class="status-btn btn-cerrado"
+                            [class.active]="ticket.status === 'cerrado'"
+                            (click)="changeStatusQuick(ticket.id, 'cerrado')"
+                          >
+                            Cerrado
+                          </button>
+                          <button 
+                            type="button" 
+                            class="status-btn btn-reabierto"
+                            [class.active]="ticket.status === 'reabierto'"
+                            (click)="changeStatusQuick(ticket.id, 'reabierto')"
+                          >
+                            Reabierto
+                          </button>
+                        </div>
+                      </div>
+
+                      <div class="separator-v"></div>
+
+                      <!-- Assignment Dropdown -->
+                      <div class="admin-control-group">
+                        <label class="control-label">Asignar Agente</label>
+                        <select [value]="ticket.assigned_to || ''" (change)="onAssignChange(ticket.id, $event)">
+                          <option value="">-- Seleccionar Agente --</option>
+                          @for (agent of agentsList(); track agent.id) {
+                            <option [value]="agent.id">
+                              {{ agent.first_name }} {{ agent.last_name }} ({{ agent.username }})
+                            </option>
+                          }
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                }
+
                 @if (ticket.attachments.length > 0) {
                   <div class="detail-attachments-section">
                     <h4>Archivos Adjuntos</h4>
@@ -375,7 +452,7 @@ import { AuthService } from '../../../../core/services/auth.service';
                   <!-- First comment is always the initial description -->
                   <div class="comment-item user">
                     <div class="comment-header">
-                      <span class="comment-sender">{{ getFirstName() }} (Usuario)</span>
+                      <span class="comment-sender">{{ getTicketUserFirstName(ticket.user_id) }} (Usuario)</span>
                       <span class="comment-time">{{ ticket.created_at | date:'dd/MM/yyyy HH:mm' }}</span>
                     </div>
                     <p class="comment-body">{{ ticket.description }}</p>
@@ -386,7 +463,7 @@ import { AuthService } from '../../../../core/services/auth.service';
                     <div class="comment-item" [ngClass]="comment.role">
                       <div class="comment-header">
                         <span class="comment-sender">
-                          {{ comment.role === 'user' ? getFirstName() + ' (Usuario)' : 'Soporte Técnico' }}
+                          {{ getCommentSender(comment) }}
                         </span>
                         <span class="comment-time">{{ comment.created_at | date:'dd/MM/yyyy HH:mm' }}</span>
                       </div>
@@ -400,7 +477,7 @@ import { AuthService } from '../../../../core/services/auth.service';
                   <textarea 
                     [(ngModel)]="newCommentText" 
                     name="newCommentText"
-                    placeholder="Escribí un comentario o respuesta para el equipo de soporte..."
+                    [placeholder]="currentUserRole() === 'user' ? 'Escribí un comentario o respuesta para el equipo de soporte...' : 'Escribí una respuesta o comentario para el usuario...'"
                     required
                   ></textarea>
                   <button type="submit" class="comment-submit-btn" [disabled]="!newCommentText.trim()">
@@ -1227,6 +1304,141 @@ import { AuthService } from '../../../../core/services/auth.service';
       opacity: 0.6;
       cursor: not-allowed;
     }
+
+    .admin-controls-card {
+      background-color: var(--color-bg-secondary);
+      border: 1.5px solid var(--color-border);
+      border-radius: var(--radius-card);
+      padding: 20px;
+      margin-top: 10px;
+    }
+
+    .admin-controls-card h4 {
+      font-family: var(--font-heading);
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--color-text-primary);
+      margin-bottom: 12px;
+      margin-top: 0;
+    }
+
+    .admin-controls-row {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .admin-control-group {
+      flex: 1;
+      min-width: 200px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .admin-control-group label {
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+    }
+
+    .admin-control-group select {
+      height: 40px;
+      padding: 0 12px;
+      border: 1.5px solid var(--color-border);
+      border-radius: var(--radius-input);
+      font-family: var(--font-body);
+      font-size: 14px;
+      color: var(--color-text-primary);
+      outline: none;
+      background-color: white;
+      cursor: pointer;
+      transition: border-color 0.2s ease;
+    }
+
+    .admin-control-group select:focus {
+      border-color: var(--color-accent-teal);
+    }
+
+    .admin-actions-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .status-buttons-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .control-label {
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 8px;
+    }
+
+    .status-btn {
+      height: 36px;
+      padding: 0 16px;
+      border: 1px solid var(--color-border);
+      border-radius: 18px;
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      background-color: white;
+      transition: all 0.2s ease;
+      color: var(--color-text-primary);
+      outline: none;
+    }
+
+    .status-btn:hover {
+      background-color: var(--color-bg-secondary);
+      border-color: var(--color-accent-teal);
+    }
+
+    .status-btn.active {
+      color: white;
+      border-color: transparent;
+      font-weight: 600;
+    }
+
+    .status-btn.btn-abierto.active {
+      background-color: #2196F3;
+    }
+
+    .status-btn.btn-progreso.active {
+      background-color: #FF9800;
+    }
+
+    .status-btn.btn-resuelto.active {
+      background-color: #4CAF50;
+    }
+
+    .status-btn.btn-cerrado.active {
+      background-color: #9E9E9E;
+    }
+
+    .status-btn.btn-reabierto.active {
+      background-color: #E91E63;
+    }
+
+    .separator-v {
+      width: 1px;
+      height: 40px;
+      background-color: var(--color-border);
+      align-self: center;
+    }
   `]
 })
 export class TicketsTabComponent {
@@ -1284,6 +1496,8 @@ export class TicketsTabComponent {
     return t ? t.messages || [] : [];
   });
 
+  agentsList = signal<any[]>([]);
+
   constructor() {
     this.initForm();
 
@@ -1293,6 +1507,17 @@ export class TicketsTabComponent {
       if (user) {
         this.ticketForm.patchValue({
           email: user.username.includes('@') ? user.username : `${user.username}@salud.larioja.gob.ar`
+        });
+      }
+    });
+
+    // Fetch agents list if the logged in user is not standard
+    effect(() => {
+      const role = this.currentUserRole();
+      if (role && role !== 'user' && this.agentsList().length === 0) {
+        this.ticketService.getAgents().subscribe({
+          next: (agents) => this.agentsList.set(agents),
+          error: (err) => console.error('Error loading agents:', err)
         });
       }
     });
@@ -1415,9 +1640,19 @@ export class TicketsTabComponent {
 
   // Ticket Operations logic
   onSelectTicket(t: Ticket): void {
-    this.selectedTicket.set(t);
-    this.setViewMode('detail');
-    this.ticketSelected.emit(t);
+    this.ticketService.getTicketDetails(t.id).subscribe({
+      next: (fullTicket) => {
+        this.selectedTicket.set(fullTicket);
+        this.setViewMode('detail');
+        this.ticketSelected.emit(fullTicket);
+      },
+      error: (err) => {
+        console.error('Error fetching ticket details:', err);
+        this.selectedTicket.set(t);
+        this.setViewMode('detail');
+        this.ticketSelected.emit(t);
+      }
+    });
   }
 
   onDeleteTicket(id: string): void {
@@ -1453,10 +1688,15 @@ export class TicketsTabComponent {
     const t = this.selectedTicket();
     if (t) {
       this.ticketService.updateTicket(t.id, this.editDescription, this.editPriority, true).subscribe(() => {
-        t.description = this.editDescription;
-        t.priority = this.editPriority;
-        t.editCount = (t.editCount || 0) + 1;
-        t.updated_at = new Date();
+        const updatedTicket = this.ticketsList().find(x => x.id === t.id);
+        if (updatedTicket) {
+          this.selectedTicket.set(updatedTicket);
+        } else {
+          t.description = this.editDescription;
+          t.priority = this.editPriority;
+          t.editCount = (t.editCount || 0) + 1;
+          t.updated_at = new Date();
+        }
         this.isEditing.set(false);
       });
     }
@@ -1468,25 +1708,40 @@ export class TicketsTabComponent {
     const txt = this.newCommentText.trim();
     if (!t || !txt) return;
 
-    const user = this.authService.currentUser();
-    const username = user ? user.username : 'anonimo';
-    const role = user && user.role === 'agent' ? 'agent' : 'user';
+    this.ticketService.addComment(t.id, txt).subscribe({
+      next: () => {
+        this.newCommentText = '';
+        const updatedTicket = this.ticketsList().find(x => x.id === t.id);
+        if (updatedTicket) {
+          this.selectedTicket.set(updatedTicket);
+        }
+      },
+      error: (err) => {
+        console.error('Error adding comment:', err);
+      }
+    });
+  }
 
-    const newMsg: TicketMessage = {
-      id: 'msg_' + Math.random().toString(36).substring(2, 9),
-      sender_id: username,
-      role: role,
-      content: txt,
-      created_at: new Date()
-    };
+  getTicketUserInitials(userId: string): string {
+    if (!userId) return 'U';
+    const name = userId.split('@')[0];
+    return name.substring(0, 2).toUpperCase();
+  }
 
-    if (!t.messages) {
-      t.messages = [];
+  getTicketUserFirstName(userId: string): string {
+    if (!userId) return 'Usuario';
+    return userId.split('@')[0];
+  }
+
+  getCommentSender(comment: TicketMessage): string {
+    const name = comment.sender_id.split('@')[0];
+    if (comment.role === 'user') {
+      return `${name} (Usuario)`;
+    } else if (comment.role === 'agent') {
+      return `${name} (Soporte Técnico)`;
+    } else {
+      return 'Asistente Virtual (Bot)';
     }
-    t.messages.push(newMsg);
-    this.newCommentText = '';
-
-    this.ticketService.updateTicket(t.id, t.description, t.priority).subscribe();
   }
 
   getUserInitials(): string {
@@ -1526,5 +1781,73 @@ export class TicketsTabComponent {
     if (interval > 1) return Math.floor(interval) + 'min';
 
     return '1m';
+  }
+
+  onStatusChange(ticketId: string, event: Event): void {
+    const select = event.target as HTMLSelectElement;
+    const newStatus = select.value;
+    if (!newStatus) return;
+
+    this.ticketService.updateTicketStatus(ticketId, newStatus).subscribe({
+      next: (updatedTicket) => {
+        const parsed = {
+          ...updatedTicket,
+          created_at: new Date(updatedTicket.created_at),
+          updated_at: new Date(updatedTicket.updated_at),
+          messages: updatedTicket.messages ? updatedTicket.messages.map((m: any) => ({
+            ...m,
+            created_at: new Date(m.created_at)
+          })) : []
+        };
+        this.selectedTicket.set(parsed);
+      },
+      error: (err) => {
+        console.error('Error changing ticket status:', err);
+      }
+    });
+  }
+
+  onAssignChange(ticketId: string, event: Event): void {
+    const select = event.target as HTMLSelectElement;
+    const agentId = select.value;
+    if (!agentId) return;
+
+    this.ticketService.assignTicket(ticketId, agentId).subscribe({
+      next: (updatedTicket) => {
+        const parsed = {
+          ...updatedTicket,
+          created_at: new Date(updatedTicket.created_at),
+          updated_at: new Date(updatedTicket.updated_at),
+          messages: updatedTicket.messages ? updatedTicket.messages.map((m: any) => ({
+            ...m,
+            created_at: new Date(m.created_at)
+          })) : []
+        };
+        this.selectedTicket.set(parsed);
+      },
+      error: (err) => {
+        console.error('Error reassigning ticket:', err);
+      }
+    });
+  }
+
+  changeStatusQuick(ticketId: string, status: string): void {
+    this.ticketService.updateTicketStatus(ticketId, status).subscribe({
+      next: (updatedTicket) => {
+        const parsed = {
+          ...updatedTicket,
+          created_at: new Date(updatedTicket.created_at),
+          updated_at: new Date(updatedTicket.updated_at),
+          messages: updatedTicket.messages ? updatedTicket.messages.map((m: any) => ({
+            ...m,
+            created_at: new Date(m.created_at)
+          })) : []
+        };
+        this.selectedTicket.set(parsed);
+      },
+      error: (err) => {
+        console.error('Error changing ticket status:', err);
+      }
+    });
   }
 }

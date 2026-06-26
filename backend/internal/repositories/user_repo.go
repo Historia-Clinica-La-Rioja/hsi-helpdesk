@@ -14,6 +14,7 @@ type UserRepository interface {
 	FindByUsernameAndDNI(username, dni string) (*models.User, error)
 	FindByUsername(username string) (*models.User, error)
 	UpdatePassword(id primitive.ObjectID, newHash string) error
+	GetAgents() ([]models.User, error)
 }
 
 type userRepository struct {
@@ -62,4 +63,23 @@ func (r *userRepository) UpdatePassword(id primitive.ObjectID, newHash string) e
 
 	_, err := r.collection.UpdateOne(ctx, filter, update)
 	return err
+}
+
+func (r *userRepository) GetAgents() ([]models.User, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Find users with agent/owner role case-insensitively
+	filter := bson.M{"role": bson.M{"$in": []string{"agent", "Agent", "AGENT", "owner", "Owner", "OWNER"}}}
+	cursor, err := r.collection.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var agents []models.User
+	if err := cursor.All(ctx, &agents); err != nil {
+		return nil, err
+	}
+	return agents, nil
 }

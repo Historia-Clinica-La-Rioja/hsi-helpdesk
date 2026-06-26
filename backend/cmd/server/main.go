@@ -42,7 +42,23 @@ func main() {
 
 	api := router.Group("/api")
 	{
-		api.POST("/tickets", ticketHandler.CreateTicket)
+		tickets := api.Group("/tickets")
+		tickets.Use(middleware.AuthMiddleware())
+		{
+			tickets.POST("", ticketHandler.CreateTicket)
+			tickets.GET("", ticketHandler.GetTickets)
+			tickets.GET("/:id", ticketHandler.GetTicket)
+			tickets.PUT("/:id", ticketHandler.UpdateTicket)
+			tickets.PUT("/:id/status", ticketHandler.UpdateTicketStatus)
+			tickets.PUT("/:id/assign", ticketHandler.AssignTicket)
+			tickets.POST("/:id/messages", ticketHandler.AddMessage)
+		}
+
+		agents := api.Group("/agents")
+		agents.Use(middleware.AuthMiddleware())
+		{
+			agents.GET("", ticketHandler.GetAgents)
+		}
 
 		auth := api.Group("/auth")
 		{

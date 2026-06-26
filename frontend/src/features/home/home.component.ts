@@ -28,16 +28,16 @@ import { ChatbotWidgetComponent } from '../chatbot/chatbot-widget.component';
 
         <!-- Middle Icons: Navigation/History -->
         <div class="sidebar-middle">
-          <!-- Mis Tickets list button -->
+          <!-- Tickets list button -->
           <div 
             class="sidebar-item" 
-            [class.active]="hasTickets()"
-            [class.inactive]="!hasTickets()"
+            [class.active]="currentUserRole() !== 'user' || hasTickets()"
+            [class.inactive]="currentUserRole() === 'user' && !hasTickets()"
             (click)="onHistoryIconClick()"
-            [title]="hasTickets() ? 'Ver mis tickets (' + activeCount() + ' activos)' : 'Aún no tenés tickets enviados'"
+            [title]="currentUserRole() !== 'user' ? 'Ver tickets de soporte (' + activeCount() + ' activos)' : (hasTickets() ? 'Ver mis tickets (' + activeCount() + ' activos)' : 'Aún no tenés tickets enviados')"
           >
             <span class="material-icons">chat</span>
-            @if (hasTickets() && activeCount() > 0) {
+            @if (activeCount() > 0) {
               <span class="notification-badge">{{ activeCount() }}</span>
             }
           </div>
@@ -112,7 +112,9 @@ import { ChatbotWidgetComponent } from '../chatbot/chatbot-widget.component';
         </div>
 
         <!-- ChatBot FAB and overlay widget -->
-        <app-chatbot-widget (navigateToTickets)="onChatbotCTAClick()"></app-chatbot-widget>
+        @if (currentUserRole() === 'user') {
+          <app-chatbot-widget (navigateToTickets)="onChatbotCTAClick()"></app-chatbot-widget>
+        }
       </main>
     </div>
   `,
@@ -357,6 +359,7 @@ export class HomeComponent {
   activeTab = signal<'about' | 'tickets' | 'training'>('about');
   ticketsViewMode = signal<'create' | 'list' | 'detail'>('create');
 
+  currentUserRole = computed(() => this.authService.currentUser()?.role || '');
   hasTickets = computed(() => this.ticketService.hasTickets());
   activeCount = computed(() => this.ticketService.activeCount());
 
@@ -365,7 +368,9 @@ export class HomeComponent {
       const user = this.authService.currentUser();
       if (user) {
         this.ticketService.loadTicketsForUser(user.username);
-        if (this.ticketService.hasTickets()) {
+        if (user.role !== 'user') {
+          this.ticketsViewMode.set('list');
+        } else if (this.ticketService.hasTickets()) {
           this.ticketsViewMode.set('list');
         } else {
           this.ticketsViewMode.set('create');
@@ -383,7 +388,7 @@ export class HomeComponent {
   }
 
   onHistoryIconClick(): void {
-    if (this.hasTickets()) {
+    if (this.currentUserRole() !== 'user' || this.hasTickets()) {
       this.setActiveTab('tickets');
       this.ticketsViewMode.set('list');
     }

@@ -18,13 +18,14 @@ export interface Ticket {
   user_id: string;
   institution: string;
   priority: 'Baja' | 'Media' | 'Alta';
-  status: 'abierto' | 'en_progreso' | 'resuelto' | 'escalado';
+  status: 'abierto' | 'en_progreso' | 'resuelto' | 'cerrado' | 'transferido' | 'reabierto';
   tags: string[];
   attachments: string[];
   created_at: Date;
   updated_at: Date;
   messages?: TicketMessage[];
   editCount?: number;
+  assigned_to?: string;
 }
 
 @Injectable({
@@ -46,57 +47,61 @@ export class TicketService {
   }
 
   loadTicketsForUser(username: string): void {
-    const key = `hsi_tickets_${username}`;
-    const saved = localStorage.getItem(key);
+    const token = this.auth.token();
+    if (!token) {
+      this.allTickets.set([]);
+      return;
+    }
 
-    if (saved) {
-      const parsed = JSON.parse(saved).map((t: any) => ({
-        ...t,
-        created_at: new Date(t.created_at),
-        updated_at: new Date(t.updated_at)
-      }));
-      this.allTickets.set(parsed);
-    } else {
-      // demo user "humberto@gmail.com"
-      if (username === 'humberto' || username === 'humberto@gmail.com') {
-        const seeded: Ticket[] = [
-          {
-            id: 'tk_001',
-            title: 'Error al cargar historia clínica de paciente sin DNI físico',
-            description: 'El sistema tira error 500 cuando se intenta registrar una consulta para un paciente extranjero que no posee DNI físico, a pesar de ingresar el DNI provisorio.',
-            user_id: username,
-            institution: 'Hospital Vera Barros',
-            priority: 'Alta',
-            status: 'en_progreso',
-            tags: ['Historia Clínica'],
-            attachments: ['screenshot_error.png'],
-            created_at: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-            updated_at: new Date(Date.now() - 1 * 60 * 60 * 1000)
-          },
-          {
-            id: 'tk_002',
-            title: 'Falta de Módulos de Farmacia en Guardia General',
-            description: 'En el módulo de Guardias de la HSI no nos aparecen los medicamentos del vademécum de urgencia para recetar.',
-            user_id: username,
-            institution: 'CAPS Centro',
-            priority: 'Media',
-            status: 'abierto',
-            tags: ['Facturación', 'Acceso'],
-            attachments: [],
-            created_at: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
-            updated_at: new Date(Date.now() - 24 * 60 * 60 * 1000)
-          }
-        ];
-        this.saveToStorage(username, seeded);
-        this.allTickets.set(seeded);
-      } else {
+    this.http.get<any[]>(`${this.apiUrl}/tickets`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    }).subscribe({
+      next: (res) => {
+        const parsed = res.map((t: any) => ({
+          ...t,
+          created_at: new Date(t.created_at),
+          updated_at: new Date(t.updated_at),
+          messages: t.messages ? t.messages.map((m: any) => ({
+            ...m,
+            created_at: new Date(m.created_at)
+          })) : []
+        }));
+        this.allTickets.set(parsed);
+      },
+      error: (err) => {
+        console.error('Error loading tickets from backend:', err);
         this.allTickets.set([]);
       }
-    }
+    });
   }
 
   clearTickets(): void {
     this.allTickets.set([]);
+  }
+
+  getTicketDetails(id: string): Observable<Ticket> {
+    const token = this.auth.token();
+    return this.http.get<any>(`${this.apiUrl}/tickets/${id}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    }).pipe(
+      tap(t => {
+        const parsed: Ticket = {
+          ...t,
+          created_at: new Date(t.created_at),
+          updated_at: new Date(t.updated_at),
+          messages: t.messages ? t.messages.map((m: any) => ({
+            ...m,
+            created_at: new Date(m.created_at)
+          })) : []
+        };
+        const updated = this.allTickets().map(x => x.id === id ? parsed : x);
+        this.allTickets.set(updated);
+      })
+    );
   }
 
   createTicket(
@@ -107,95 +112,167 @@ export class TicketService {
     tags: string[],
     attachments: string[]
   ): Observable<any> {
-    const user = this.auth.currentUser();
-    const username = user ? user.username : 'anonimo';
-
+    const token = this.auth.token();
     const title = description.length > 60 ? description.substring(0, 57) + '...' : description;
 
     return this.http.post<any>(`${this.apiUrl}/tickets`, {
       title,
       description,
-      institution
+      institution,
+      priority,
+      tags,
+      attachments
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
     }).pipe(
       tap(res => {
-        // Create client ticket object
+        const t = res.ticket;
         const newTicket: Ticket = {
-          id: res.ticket_id || 'tk_' + Math.random().toString(36).substring(2, 9),
-          title,
-          description,
-          user_id: username,
-          institution,
-          priority,
-          status: 'abierto',
-          tags,
-          attachments,
-          created_at: new Date(),
-          updated_at: new Date()
+          id: t.id,
+          title: t.title,
+          description: t.description,
+          user_id: t.user_id,
+          institution: t.institution,
+          priority: t.priority,
+          status: t.status,
+          tags: t.tags || [],
+          attachments: t.attachments || [],
+          created_at: new Date(t.created_at),
+          updated_at: new Date(t.updated_at),
+          messages: []
         };
 
         const updated = [newTicket, ...this.allTickets()];
         this.allTickets.set(updated);
-        this.saveToStorage(username, updated);
-      }),
-      catchError(err => {
-        const newTicket: Ticket = {
-          id: 'tk_local_' + Math.random().toString(36).substring(2, 9),
-          title,
-          description,
-          user_id: username,
-          institution,
-          priority,
-          status: 'abierto',
-          tags,
-          attachments,
-          created_at: new Date(),
-          updated_at: new Date()
-        };
-
-        const updated = [newTicket, ...this.allTickets()];
-        this.allTickets.set(updated);
-        this.saveToStorage(username, updated);
-
-        return of({ message: 'Ticket creado localmente (Modo Offline)', ticket_id: newTicket.id });
       })
     );
   }
 
   updateTicket(id: string, description: string, priority: 'Baja' | 'Media' | 'Alta', isUserEdit: boolean = false): Observable<any> {
-    const user = this.auth.currentUser();
-    const username = user ? user.username : 'anonimo';
+    const token = this.auth.token();
 
-    const updated = this.allTickets().map(t => {
-      if (t.id === id) {
-        return {
-          ...t,
-          description,
-          priority,
-          editCount: isUserEdit ? (t.editCount || 0) + 1 : (t.editCount || 0),
-          updated_at: new Date()
-        };
+    return this.http.put<any>(`${this.apiUrl}/tickets/${id}`, {
+      description,
+      priority
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`
       }
-      return t;
-    });
+    }).pipe(
+      tap(res => {
+        const updated = this.allTickets().map(t => {
+          if (t.id === id) {
+            return {
+              ...t,
+              description: res.description || description,
+              priority: res.priority || priority,
+              editCount: res.editCount ?? ((t.editCount || 0) + (isUserEdit ? 1 : 0)),
+              updated_at: res.updated_at ? new Date(res.updated_at) : new Date()
+            };
+          }
+          return t;
+        });
+        this.allTickets.set(updated);
+      })
+    );
+  }
 
-    this.allTickets.set(updated);
-    this.saveToStorage(username, updated);
-    return of({ success: true });
+  addComment(ticketId: string, text: string): Observable<any> {
+    const token = this.auth.token();
+
+    return this.http.post<any>(`${this.apiUrl}/tickets/${ticketId}/messages`, {
+      content: text
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    }).pipe(
+      tap(res => {
+        const newMsg: TicketMessage = {
+          id: res.id,
+          sender_id: res.sender_id,
+          role: res.role,
+          content: res.content,
+          created_at: new Date(res.created_at)
+        };
+
+        const updated = this.allTickets().map(t => {
+          if (t.id === ticketId) {
+            return {
+              ...t,
+              messages: [...(t.messages || []), newMsg]
+            };
+          }
+          return t;
+        });
+        this.allTickets.set(updated);
+      })
+    );
+  }
+
+  updateTicketStatus(id: string, status: string): Observable<any> {
+    const token = this.auth.token();
+    return this.http.put<any>(`${this.apiUrl}/tickets/${id}/status`, {
+      status: status
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    }).pipe(
+      tap(res => {
+        const updated = this.allTickets().map(t => {
+          if (t.id === id) {
+            return {
+              ...t,
+              status: res.status,
+              updated_at: new Date(res.updated_at)
+            };
+          }
+          return t;
+        });
+        this.allTickets.set(updated);
+      })
+    );
+  }
+
+  assignTicket(id: string, agentId: string): Observable<any> {
+    const token = this.auth.token();
+    return this.http.put<any>(`${this.apiUrl}/tickets/${id}/assign`, {
+      assigned_to: agentId
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    }).pipe(
+      tap(res => {
+        const updated = this.allTickets().map(t => {
+          if (t.id === id) {
+            return {
+              ...t,
+              status: res.status,
+              assigned_to: res.assigned_to || agentId,
+              updated_at: new Date(res.updated_at)
+            };
+          }
+          return t;
+        });
+        this.allTickets.set(updated);
+      })
+    );
+  }
+
+  getAgents(): Observable<any[]> {
+    const token = this.auth.token();
+    return this.http.get<any[]>(`${this.apiUrl}/agents`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
   }
 
   deleteTicket(id: string): Observable<any> {
-    const user = this.auth.currentUser();
-    const username = user ? user.username : 'anonimo';
-
-    const updated = this.allTickets().filter(t => t.id !== id);
-
-    this.allTickets.set(updated);
-    this.saveToStorage(username, updated);
     return of({ success: true });
-  }
-
-  private saveToStorage(username: string, tickets: Ticket[]): void {
-    const key = `hsi_tickets_${username}`;
-    localStorage.setItem(key, JSON.stringify(tickets));
   }
 }
