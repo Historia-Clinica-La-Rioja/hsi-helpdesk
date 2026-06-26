@@ -1,9 +1,14 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
-	"strings"
+	"fmt"
+	"log"
+	"net/http"
+	"time"
 
+	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/models"
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/repositories"
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/pkg/jwt"
 	"golang.org/x/crypto/bcrypt"
@@ -11,26 +16,88 @@ import (
 
 type AuthService interface {
 	AuthenticateUser(username, role, dni, password string) (string, error)
+	AuthenticateSSO(hsiToken string, role string) (string, error) // <-- Quitamos el parámetro username
 }
 
 type authService struct {
-	userRepo repositories.UserRepository
+	userRepo  repositories.UserRepository
+	hsiApiUrl string
 }
 
-func NewAuthService(repo repositories.UserRepository) AuthService {
-	return &authService{userRepo: repo}
+func NewAuthService(repo repositories.UserRepository, hsiApiUrl string) AuthService {
+	return &authService{
+		userRepo:  repo,
+		hsiApiUrl: hsiApiUrl,
+	}
+}
+
+func (s *authService) AuthenticateSSO(hsiToken string, role string) (string, error) {
+	var hsiData struct {
+		ID        int `json:"id"`
+		PersonDto struct {
+			FirstName string `json:"firstName"`
+			LastName  string `json:"lastName"`
+		} `json:"personDto"`
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	
+	log.Printf("Intentando conectar con HSI en: %s", s.hsiApiUrl)
+	req, _ := http.NewRequest("GET", s.hsiApiUrl, nil)
+	req.Header.Set("Authorization", "Bearer "+hsiToken)
+	
+	resp, reqErr := client.Do(req)
+
+	if reqErr != nil || resp == nil || resp.StatusCode != http.StatusOK {
+		if reqErr != nil {
+			log.Printf("❌ Error de red con HSI en %s: %v", s.hsiApiUrl, reqErr)
+		} else if resp != nil {
+			log.Printf("⚠️ HSI rechazó el token. Status Code: %d", resp.StatusCode)
+		}
+		return "", errors.New("el token de HSI fue rechazado o está expirado")
+	}
+	defer resp.Body.Close()
+
+	log.Printf("✅ ¡Conexión exitosa con HSI!")
+
+	if err := json.NewDecoder(resp.Body).Decode(&hsiData); err != nil {
+		return "", errors.New("error al leer el perfil desde HSI")
+	}
+
+	username := fmt.Sprintf("hsi_user_%d", hsiData.ID)
+
+	user, err := s.userRepo.FindByUsername(username)
+	if err != nil {
+		log.Printf("Usuario %s no existe en BD. Iniciando auto-aprovisionamiento...", username)
+		newUser := models.User{
+			Username:  username,
+			Role:      role,
+			FirstName: hsiData.PersonDto.FirstName,
+			LastName:  hsiData.PersonDto.LastName,
+		}
+
+		createdUser, createErr := s.userRepo.Create(&newUser)
+		if createErr != nil {
+			return "", errors.New("no se pudo registrar el usuario en el sistema de tickets")
+		}
+		user = createdUser
+		log.Printf("✅ Usuario %s creado exitosamente en Mongo.", username)
+	}
+
+	token, err := jwt.GenerateToken(user.ID.Hex(), user.Role)
+	if err != nil {
+		return "", errors.New("error al generar el token interno")
+	}
+
+	return token, nil
 }
 
 func (s *authService) AuthenticateUser(username, role, dni, password string) (string, error) {
-	// Normalizamos el rol para evitar problemas de mayúsculas
-	roleUpper := strings.ToUpper(role)
-
-	switch roleUpper {
-	case "USER":
+	switch role {
+	case "user", "USER":
 		if dni == "" {
 			return "", errors.New("el DNI es obligatorio para acceder como usuario")
 		}
-
 		user, err := s.userRepo.FindByUsernameAndDNI(username, dni)
 		if err != nil {
 			return "", errors.New("credenciales inválidas")
@@ -42,46 +109,21 @@ func (s *authService) AuthenticateUser(username, role, dni, password string) (st
 		}
 		return jwt.GenerateToken(user.ID.Hex(), role)
 
-	case "AGENT", "OWNER":
+	case "agent", "AGENT":
 		if password == "" {
 			return "", errors.New("la contraseña es obligatoria para acceder como agente")
 		}
-
 		user, err := s.userRepo.FindByUsername(username)
 		if err != nil {
 			return "", errors.New("credenciales inválidas")
 		}
-
 		if user.Password == nil {
-			return "", errors.New("el usuario no tiene una contraseña configurada")
+			return "", errors.New("credenciales inválidas")
 		}
-
-		dbPassword := *user.Password
-
-		// --- LÓGICA DE AUTO-MIGRACIÓN PARA TEXTO PLANO ---
-		// Los hashes de bcrypt siempre empiezan con $2a$
-		if !strings.HasPrefix(dbPassword, "$2a$") {
-			// Si no es hash, comparamos como texto plano
-			if dbPassword == password {
-				// Si coincide, generamos el hash y actualizamos la DB de forma silenciosa
-				hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-				if err == nil {
-					_ = s.userRepo.UpdatePassword(user.ID, string(hashedPassword))
-					// Actualizamos la variable local para que el flujo siga normal
-					dbPassword = string(hashedPassword)
-				}
-			} else {
-				return "", errors.New("credenciales inválidas")
-			}
-		}
-
-		// Verificación estándar con bcrypt
-		err = bcrypt.CompareHashAndPassword([]byte(dbPassword), []byte(password))
+		err = bcrypt.CompareHashAndPassword([]byte(*user.Password), []byte(password))
 		if err != nil {
 			return "", errors.New("credenciales inválidas")
 		}
-
-		// Generar JWT
 		return jwt.GenerateToken(user.ID.Hex(), user.Role)
 
 	default:

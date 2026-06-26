@@ -10,6 +10,7 @@ type Config struct {
 	MongoURI   string
 	MongoDB    string
 	ServerPort string
+	HsiApiUrl  string
 }
 
 func LoadConfig() *Config {
@@ -20,6 +21,7 @@ func LoadConfig() *Config {
 		MongoURI:   getEnv("MONGO_URI", "mongodb://localhost:27017"),
 		MongoDB:    getEnv("MONGO_DB", "hsi_tickets"),
 		ServerPort: getEnv("SERVER_PORT", "8080"),
+		HsiApiUrl:  getEnv("HSI_API_URL", "http://host.docker.internal:8080/api/account/info"),
 	}
 
 	return cfg

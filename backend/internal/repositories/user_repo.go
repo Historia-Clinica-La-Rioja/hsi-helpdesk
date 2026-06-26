@@ -53,7 +53,6 @@ func (r *userRepository) FindByUsername(username string) (*models.User, error) {
 	return &user, nil
 }
 
-// UpdatePassword permite actualizar la clave de texto plano a Hash de forma automática
 func (r *userRepository) UpdatePassword(id primitive.ObjectID, newHash string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
