@@ -373,7 +373,7 @@ import { AuthService } from '../../../../core/services/auth.service';
 
                       <!-- Assignment Dropdown -->
                       <div class="admin-control-group">
-                        <label class="control-label">Asignar Agente</label>
+                        <label class="control-label">Transferir Ticket</label>
                         <select [value]="ticket.assigned_to || ''" (change)="onAssignChange(ticket.id, $event)">
                           <option value="">-- Seleccionar Agente --</option>
                           @for (agent of agentsList(); track agent.id) {
