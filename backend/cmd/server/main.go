@@ -19,13 +19,20 @@ func main() {
 	client := config.ConnectDB(cfg)
 	db := client.Database(cfg.MongoDB)
 
+	// Inicialización de Tickets
 	ticketRepo := repositories.NewTicketRepository(db)
 	ticketService := services.NewTicketService(ticketRepo)
 	ticketHandler := handlers.NewTicketHandler(ticketService)
 
+	// Inicialización de Usuarios/Auth
 	userRepo := repositories.NewUserRepository(db)
 	authService := services.NewAuthService(userRepo, cfg.HsiApiUrl)
 	authHandler := handlers.NewAuthHandler(authService)
+
+	// 👇 NUEVO: Inicialización de Instituciones
+	// (Asegurate de haber creado estos archivos antes: repository y handler)
+	institutionRepo := repositories.NewInstitutionRepository(db)
+	institutionHandler := handlers.NewInstitutionHandler(institutionRepo)
 
 	router := gin.Default()
 
@@ -42,6 +49,10 @@ func main() {
 
 	api := router.Group("/api")
 	{
+		// 👇 NUEVO: La ruta de instituciones va directo bajo "/api"
+		// (A menos que quieras protegerla con AuthMiddleware, en ese caso iría adentro de un grupo protegido)
+		api.GET("/institutions", institutionHandler.GetInstitutions)
+
 		tickets := api.Group("/tickets")
 		tickets.Use(middleware.AuthMiddleware())
 		{

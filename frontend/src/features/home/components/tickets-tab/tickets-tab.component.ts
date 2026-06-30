@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, inject, signal, computed, effect } from '@angular/core';
+import { Component, Input, Output, EventEmitter, inject, signal, computed, effect, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
@@ -6,6 +6,14 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { TicketService, Ticket, TicketMessage } from '../../../../core/services/ticket.service';
 import { AuthService } from '../../../../core/services/auth.service';
+import { HttpClient } from '@angular/common/http';
+
+export interface Institution {
+  _id: string;
+  id: number;
+  name: string;
+  email: string;
+}
 
 @Component({
   selector: 'app-tickets-tab',
@@ -60,8 +68,8 @@ import { AuthService } from '../../../../core/services/auth.service';
                       (input)="onInstitutionInput($event)"
                     />
                     <mat-autocomplete #auto="matAutocomplete" (optionSelected)="onInstitutionSelect($event.option.value)">
-                      @for (inst of filteredInstitutions(); track inst) {
-                        <mat-option [value]="inst">{{ inst }}</mat-option>
+                      @for (inst of filteredInstitutions(); track inst._id) {
+                        <mat-option [value]="inst.name">{{ inst.name }}</mat-option>
                       }
                     </mat-autocomplete>
                   </div>
@@ -1441,10 +1449,12 @@ import { AuthService } from '../../../../core/services/auth.service';
     }
   `]
 })
-export class TicketsTabComponent {
+
+export class TicketsTabComponent implements OnInit {
   private ticketService = inject(TicketService);
   private authService = inject(AuthService);
   private fb = inject(FormBuilder);
+  private http = inject(HttpClient);
 
   @Input() set viewMode(mode: 'create' | 'list' | 'detail') {
     this.innerViewMode.set(mode);
@@ -1463,12 +1473,14 @@ export class TicketsTabComponent {
   isDragOver = signal(false);
 
   // Autocomplete variables
-  institutions = ['Hospital Vera Barros', 'CAPS Centro', 'Dirección de Atención Primaria'];
+  institutions = signal<Institution[]>([]);
   institutionQuery = signal('');
+
   filteredInstitutions = computed(() => {
     const q = this.institutionQuery().toLowerCase();
-    if (!q) return this.institutions;
-    return this.institutions.filter(opt => opt.toLowerCase().includes(q));
+    const currentInst = this.institutions();
+    if (!q) return currentInst;
+    return currentInst.filter(opt => opt.name.toLowerCase().includes(q));
   });
 
   // Priority chip signal
@@ -1483,6 +1495,8 @@ export class TicketsTabComponent {
 
   // Get active tickets list from service
   ticketsList = computed(() => this.ticketService.tickets());
+  
+  
 
   // Inline editing signals
   isEditing = signal(false);
@@ -1519,6 +1533,22 @@ export class TicketsTabComponent {
           next: (agents) => this.agentsList.set(agents),
           error: (err) => console.error('Error loading agents:', err)
         });
+      }
+    });
+  }
+
+  ngOnInit() {
+    // Al iniciar el componente, traemos las instituciones de la base de datos
+    this.loadInstitutions();
+  }
+
+  loadInstitutions() {
+    this.http.get<Institution[]>('http://localhost:8083/api/institutions').subscribe({
+      next: (data) => {
+        this.institutions.set(data);
+      },
+      error: (err) => {
+        console.error('Error al cargar las instituciones desde la BD:', err);
       }
     });
   }
@@ -1851,3 +1881,5 @@ export class TicketsTabComponent {
     });
   }
 }
+
+
