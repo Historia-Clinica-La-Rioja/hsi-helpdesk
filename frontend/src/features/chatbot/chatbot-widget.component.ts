@@ -1,6 +1,16 @@
-import { Component, Output, EventEmitter, signal, ElementRef, ViewChild, AfterViewChecked } from '@angular/core';
+import { Component, Output, EventEmitter, signal, ElementRef, ViewChild, AfterViewChecked, OnInit, inject, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+
+export interface Faq {
+  id: string;
+  label: string;
+  questions: string;
+  answers: string;
+  is_active: boolean;
+}
+
 
 export interface ChatMessage {
   id: string;
@@ -9,6 +19,7 @@ export interface ChatMessage {
   timestamp: Date;
   isCTA?: boolean;
   isEscalation?: boolean;
+  isEscalationPrompt?: boolean;
 }
 
 @Component({
@@ -16,11 +27,9 @@ export interface ChatMessage {
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <!-- Floating Action Button (FAB) -->
     <div class="bot-fab-container" [class.hidden]="isOpen()">
       <span class="bot-fab-label">ChatBot</span>
       <button class="bot-fab animate-pulse-slow" (click)="toggleChat()">
-        <!-- Decorative notification dot -->
         <span class="notification-dot"></span>
         <div class="fab-bot-icon">
           <span class="bot-eyes"></span>
@@ -28,12 +37,10 @@ export interface ChatMessage {
       </button>
     </div>
 
-    <!-- Chat Window Modal / Overlay -->
     @if (isOpen()) {
       <div class="chat-overlay" (click)="closeChat()">
         <div class="chat-window" (click)="$event.stopPropagation()">
           
-          <!-- Header -->
           <div class="chat-header">
             <div class="header-left">
               <div class="header-bot-icon">
@@ -58,7 +65,6 @@ export interface ChatMessage {
             </div>
           </div>
 
-          <!-- Message History Area -->
           <div class="chat-history" #scrollContainer>
             @for (msg of messages(); track msg.id) {
               <div class="message-row" [ngClass]="msg.sender">
@@ -87,35 +93,39 @@ export interface ChatMessage {
                       Ir a Tickets →
                     </button>
                   }
+
+                  @if (msg.isEscalationPrompt) {
+                    <button class="cta-btn" (click)="triggerEscalation()" style="background-color: var(--color-accent-teal); color: white; margin-top: 8px;">
+                      👤 Hablar con un agente
+                    </button>
+                  }
                 </div>
-              </div>
-            }
-
-            <!-- FAQ Suggestions chips -->
-            @if (showFAQChips()) {
+              </div> } @if (showFAQChips() && faqs().length > 0) {
               <div class="faq-chips-row">
-                <button 
-                  class="faq-chip" 
-                  (click)="onFAQClick('¿Cómo cargo un ticket?')"
-                >
-                  ¿Cómo cargo un ticket?
-                </button>
-                <button 
-                  class="faq-chip" 
-                  (click)="onFAQClick('Olvidé mi contraseña')"
-                >
-                  Olvidé mi contraseña
-                </button>
-                <button 
-                  class="faq-chip" 
-                  (click)="onFAQClick('Estado de mi ticket')"
-                >
-                  Estado de mi ticket
-                </button>
+                
+                @if (!selectedCategory()) {
+                  @for (category of uniqueCategories(); track category) {
+                    <button class="faq-chip" (click)="onCategoryClick(category)">
+                      {{ category }}
+                    </button>
+                  }
+                } 
+                
+                @else {
+                  <button class="faq-chip back-chip" (click)="onBackToCategories()" style="background-color: var(--color-bg-secondary); border-color: var(--color-border); color: var(--color-text-primary);">
+                    <span class="material-icons" style="font-size: 14px; vertical-align: middle;">arrow_back</span>
+                  </button>
+                  
+                  @for (faq of faqsForCategory(); track faq.id) {
+                    <button class="faq-chip" (click)="onFAQClick(faq)">
+                      {{ faq.questions }}
+                    </button>
+                  }
+                }
+
               </div>
             }
 
-            <!-- Typing indicator -->
             @if (isTyping()) {
               <div class="message-row bot">
                 <div class="bot-avatar">
@@ -130,9 +140,8 @@ export interface ChatMessage {
                 </div>
               </div>
             }
-          </div>
-
-          <!-- Input Bar -->
+          </div> 
+          
           <form class="chat-input-bar" (submit)="onSubmit($event)">
             <textarea 
               rows="1"
@@ -148,10 +157,11 @@ export interface ChatMessage {
             </button>
           </form>
 
-        </div>
-      </div>
+        </div> 
+      </div> 
     }
   `,
+
   styles: [`
     /* FAB Button style */
     .bot-fab-container {
@@ -580,27 +590,110 @@ export interface ChatMessage {
     }
   `]
 })
-export class ChatbotWidgetComponent implements AfterViewChecked {
+export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
   @Output() navigateToTickets = new EventEmitter<void>();
   @ViewChild('scrollContainer') private scrollContainer!: ElementRef;
   @ViewChild('inputTextarea') private inputTextarea!: ElementRef;
+
+  private http = inject(HttpClient);
 
   isOpen = signal(false);
   isTyping = signal(false);
   showFAQChips = signal(true);
   userInput = '';
 
+  faqs = signal<Faq[]>([]);
+
+  // 👇 NUEVO: Signal para saber qué categoría seleccionó el usuario
+  selectedCategory = signal<string | null>(null);
+
+  failedAttempts = signal(0);
+  
+  // 👇 NUEVO: Extraemos solo las categorías (labels) únicas para el primer menú
+  uniqueCategories = computed(() => {
+    const allFaqs = this.faqs();
+    // Usamos Set para eliminar los duplicados mágicamente
+    return [...new Set(allFaqs.map(f => f.label))];
+  });
+
+  // 👇 NUEVO: Filtramos las FAQs que pertenecen a la categoría seleccionada
+  faqsForCategory = computed(() => {
+    const category = this.selectedCategory();
+    if (!category) return [];
+    return this.faqs().filter(f => f.label === category);
+  });
+
   messages = signal<ChatMessage[]>([
     {
       id: 'msg_1',
       sender: 'bot',
-      content: '¡Hola! Soy el asistente virtual de HSI. ¿En qué puedo ayudarte hoy?',
+      content: '¡Hola! Soy el asistente virtual de HSI. Podés escribir tu consulta en la barra de texto o elegir una de las opciones rápidas:',
       timestamp: new Date()
     }
   ]);
 
+  ngOnInit(): void {
+    // Cargar FAQs al iniciar el componente
+    this.loadFaqs();
+  }
+
+  // 👇 AGREGADO: Buscador por palabras clave que le faltaba a tu clase
+  private findBestFaqMatch(input: string): Faq | undefined {
+    // Normalizamos el texto (pasamos a minúsculas y quitamos acentos)
+    const normalizedInput = input.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    
+    // Palabras comunes que ignoramos
+    const stopWords = ['el', 'la', 'los', 'las', 'un', 'una', 'como', 'mi', 'de', 'para', 'que', 'en', 'a', 'y', 'o', 'por', 'con', 'tu', 'su', 'quiero', 'necesito'];
+    
+    const keywords = normalizedInput
+      .split(/\W+/)
+      .filter(word => word.length > 2 && !stopWords.includes(word));
+
+    if (keywords.length === 0) return undefined;
+
+    let bestMatch: Faq | undefined = undefined;
+    let highestScore = 0;
+
+    for (const faq of this.faqs()) {
+      const targetText = `${faq.label} ${faq.questions} ${faq.answers}`
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+      
+      let score = 0;
+      for (const kw of keywords) {
+        if (targetText.includes(kw)) {
+          score++;
+        }
+      }
+
+      if (score > highestScore) {
+        highestScore = score;
+        bestMatch = faq;
+      }
+    }
+
+    return highestScore > 0 ? bestMatch : undefined;
+  }
   ngAfterViewChecked(): void {
     this.scrollToBottom();
+  }
+
+  loadFaqs(): void {
+    // Usamos la clave exacta que vimos en el navegador
+    const token = localStorage.getItem('hsi_token');
+
+    // Armamos el encabezado con el token
+    const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
+
+    this.http.get<Faq[]>('http://localhost:8083/api/faqs', { headers }).subscribe({
+      next: (data) => {
+        this.faqs.set(data);
+      },
+      error: (err) => {
+        console.error('Error al cargar las FAQs:', err);
+      }
+    });
   }
 
   toggleChat(): void {
@@ -617,44 +710,52 @@ export class ChatbotWidgetComponent implements AfterViewChecked {
 
   resetChat(): void {
     this.showFAQChips.set(true);
+    this.selectedCategory.set(null);
     this.messages.set([
       {
         id: 'msg_1',
         sender: 'bot',
-        content: '¡Hola! Soy el asistente virtual de HSI. ¿En qué puedo ayudarte hoy?',
+        content: '¡Hola! Soy el asistente virtual de HSI. Podés escribir tu consulta en la barra de texto o elegir una de las opciones rápidas:',
         timestamp: new Date()
       }
     ]);
     this.isTyping.set(false);
   }
 
-  onFAQClick(faq: string): void {
+  onCategoryClick(category: string): void {
+    this.selectedCategory.set(category);
+  }
+
+  onBackToCategories(): void {
+    this.selectedCategory.set(null);
+  }
+
+ onFAQClick(faq: Faq): void {
     this.showFAQChips.set(false);
-    this.addMessage('user', faq);
+    this.selectedCategory.set(null); // Reseteamos la categoría internamente
+    
+    this.addMessage('user', faq.questions);
     this.isTyping.set(true);
 
     setTimeout(() => {
       this.isTyping.set(false);
 
-      if (faq === '¿Cómo cargo un ticket?') {
-        this.messages.set([
-          ...this.messages(),
-          {
-            id: 'msg_' + Math.random(),
-            sender: 'bot',
-            content: 'Para cargar un ticket de soporte, dirigite a la sección "Tickets" en el menú superior y completá el formulario. Podés agregar la prioridad, etiquetas y capturas de pantalla para ayudarnos a resolverlo.',
-            timestamp: new Date(),
-            isCTA: true
-          }
-        ]);
-      } else if (faq === 'Olvidé mi contraseña') {
-        this.addMessage('bot', 'Para blanquear tu contraseña de Historia de Salud Integrada, debes comunicarte con el administrador de HSI de tu institución asistencial o escribir al área de sistemas del Ministerio de Salud.');
-        this.simulateEscalation();
-      } else {
-        // Estado de mi ticket
-        this.addMessage('bot', 'Podés revisar el estado de tus consultas activas ingresando a la pestaña "Tickets" y luego haciendo click en el ícono de listado de tickets en la barra lateral izquierda.');
-        this.simulateEscalation();
-      }
+      this.messages.set([
+        ...this.messages(),
+        {
+          id: 'msg_' + Math.random(),
+          sender: 'bot',
+          content: faq.answers,
+          timestamp: new Date(),
+          isCTA: faq.label.toLowerCase().includes('ticket') 
+        }
+      ]);
+      
+      // 👇 NUEVO: Volvemos a mostrar el menú de opciones para que haga otra consulta
+      this.showFAQChips.set(true);
+      // Forzamos el scroll hacia abajo para que el usuario vea que reaparecieron las opciones
+      setTimeout(() => this.scrollToBottom(), 50);
+
     }, 1200);
   }
 
@@ -662,6 +763,7 @@ export class ChatbotWidgetComponent implements AfterViewChecked {
     event.preventDefault();
     this.onSubmit();
   }
+  
 
   onSubmit(event?: Event): void {
     if (event) event.preventDefault();
@@ -670,29 +772,77 @@ export class ChatbotWidgetComponent implements AfterViewChecked {
 
     this.userInput = '';
     this.showFAQChips.set(false);
+    this.selectedCategory.set(null); 
+    
     this.addMessage('user', input);
     this.isTyping.set(true);
 
     setTimeout(() => {
       this.isTyping.set(false);
 
-      if (input.toLowerCase().includes('ticket') || input.toLowerCase().includes('cargar') || input.toLowerCase().includes('crear')) {
-        this.messages.set([
-          ...this.messages(),
-          {
-            id: 'msg_' + Math.random(),
-            sender: 'bot',
-            content: 'Entiendo que querés cargar un ticket de soporte. Hacé click abajo para ir directamente al formulario.',
-            timestamp: new Date(),
-            isCTA: true
-          }
-        ]);
+      const matchedFaq = this.findBestFaqMatch(input);
+
+      if (matchedFaq) {
+        // ¡Entendió la pregunta! Reseteamos los fallos a 0
+        this.failedAttempts.set(0);
+        
+        this.addMessage('bot', matchedFaq.answers);
+        
+        if (matchedFaq.label.toLowerCase().includes('ticket') || matchedFaq.questions.toLowerCase().includes('ticket')) {
+          this.messages.set([
+            ...this.messages(),
+            {
+              id: 'msg_' + Math.random(),
+              sender: 'bot',
+              content: 'Hacé click abajo para ir directamente al formulario de tickets.',
+              timestamp: new Date(),
+              isCTA: true
+            }
+          ]);
+        }
+        
+        this.showFAQChips.set(true);
+        setTimeout(() => this.scrollToBottom(), 50);
+
       } else {
-        this.addMessage('bot', 'Entendido. Si necesitás atención personalizada respecto a esa consulta, puedo conectarte con un agente humano de soporte técnico.');
-        this.simulateEscalation();
+        // No entendió. Sumamos 1 al contador
+        const currentFails = this.failedAttempts() + 1;
+        this.failedAttempts.set(currentFails);
+
+        if (currentFails >= 3) {
+          // Ya falló 3 veces, le damos la opción de humano
+          this.messages.set([
+            ...this.messages(),
+            {
+              id: 'msg_' + Math.random(),
+              sender: 'bot',
+              content: 'Parece que no estoy logrando encontrar la respuesta exacta. ¿Preferís que te conecte con un agente humano del equipo de soporte?',
+              timestamp: new Date(),
+              isEscalationPrompt: true
+            }
+          ]);
+          setTimeout(() => this.scrollToBottom(), 50);
+          
+        } else {
+          // Es el intento 1 o 2, pedimos que reformule
+          this.addMessage('bot', 'No logré entender tu consulta. ¿Podrías usar otras palabras o ser un poco más específico?');
+          
+          this.showFAQChips.set(true);
+          setTimeout(() => this.scrollToBottom(), 50);
+        }
       }
     }, 1200);
   }
+
+  triggerEscalation(): void {
+  this.failedAttempts.set(0);
+  this.addMessage('user', 'Quiero hablar con un agente humano');
+  this.isTyping.set(true);
+  setTimeout(() => {
+    this.isTyping.set(false);
+    this.simulateEscalation();
+  }, 800);
+}
 
   private addMessage(sender: 'bot' | 'user' | 'agent', content: string, extra?: Partial<ChatMessage>): void {
     const newMsg: ChatMessage = {
@@ -718,7 +868,7 @@ export class ChatbotWidgetComponent implements AfterViewChecked {
         }
       ]);
 
-      // Conexión con agente Yanina
+      // Conexión con agente 
       setTimeout(() => {
         this.addMessage('agent', 'Hola, soy Yanina del equipo de soporte. Decime cuál es tu consulta y lo resolvemos.');
       }, 1500);
