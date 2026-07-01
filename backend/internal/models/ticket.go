@@ -21,6 +21,9 @@ type DBTicket struct {
 	PriorityID  primitive.ObjectID  `bson:"priority_id" json:"priority_id"`
 	StateID     primitive.ObjectID  `bson:"state_id" json:"state_id"`
 	EditCount   int                 `bson:"edit_count" json:"edit_count"`
+	ClosedAt    *time.Time          `bson:"closed_at,omitempty" json:"closed_at,omitempty"`
+	ResolvedAt  *time.Time          `bson:"resolved_at,omitempty" json:"resolved_at,omitempty"`
+	ReopenedAt  *time.Time          `bson:"reopened_at,omitempty" json:"reopened_at,omitempty"`
 }
 
 // DBMessage represents the schema of the Messages collection in MongoDB
@@ -68,6 +71,9 @@ type APITicket struct {
 	Messages    []APIMessage `json:"messages,omitempty"`
 	EditCount   int          `json:"editCount"`
 	AssignedTo  string       `json:"assigned_to,omitempty"`
+	ClosedAt    *time.Time   `json:"closed_at,omitempty"`
+	ResolvedAt  *time.Time   `json:"resolved_at,omitempty"`
+	ReopenedAt  *time.Time   `json:"reopened_at,omitempty"`
 }
 
 // APIMessage is the comment message returned to the frontend
