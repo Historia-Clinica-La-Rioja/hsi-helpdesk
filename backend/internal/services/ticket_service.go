@@ -294,6 +294,13 @@ func (s *ticketService) AddMessage(userObjectID primitive.ObjectID, role string,
 		}
 	}
 
+	// Access Control: if ticket is assigned to an agent, only that agent can respond
+	if roleLower == "agent" || roleLower == "owner" || roleLower == "admin" {
+		if dbT.AssignedTo != nil && *dbT.AssignedTo != userObjectID {
+			return nil, errors.New("solo el agente asignado puede responder a este ticket")
+		}
+	}
+
 	// Dynamic State Transition Logic
 	status := StateIDToName[dbT.StateID]
 	stateChanged := false
@@ -307,6 +314,12 @@ func (s *ticketService) AddMessage(userObjectID primitive.ObjectID, role string,
 			dbT.UpdatedAt = time.Now()
 			stateChanged = true
 			stateChangeAudit = fmt.Sprintf("Agente %s tomó el ticket y comenzó a responder. Estado cambiado a En progreso.", fullName)
+		} else if status == "reabierto" {
+			// Rule: if agent responds to reabierto, change status to en_progreso
+			dbT.StateID = StateNameToID["en_progreso"]
+			dbT.UpdatedAt = time.Now()
+			stateChanged = true
+			stateChangeAudit = fmt.Sprintf("Agente %s respondió al ticket reabierto. Estado cambiado a En progreso.", fullName)
 		}
 	} else if roleLower == "user" {
 		// Rule: if user comments on resolved/closed ticket, move to reabierto
@@ -314,6 +327,8 @@ func (s *ticketService) AddMessage(userObjectID primitive.ObjectID, role string,
 			dbT.StateID = StateNameToID["reabierto"]
 			now := time.Now()
 			dbT.ReopenedAt = &now
+			dbT.ResolvedAt = nil
+			dbT.ClosedAt = nil
 			dbT.UpdatedAt = now
 			stateChanged = true
 			stateChangeAudit = fmt.Sprintf("Usuario %s reabrió el ticket.", fullName)
@@ -394,6 +409,14 @@ func (s *ticketService) UpdateTicketStatus(userObjectID primitive.ObjectID, role
 		return nil, err
 	}
 
+	// Access Control: if ticket is assigned to an agent, only that agent can change status
+	roleLower := strings.ToLower(role)
+	if roleLower == "agent" || roleLower == "owner" || roleLower == "admin" {
+		if dbT.AssignedTo != nil && *dbT.AssignedTo != userObjectID {
+			return nil, errors.New("solo el agente asignado puede cambiar el estado de este ticket")
+		}
+	}
+
 	stateID, ok := StateNameToID[strings.ToLower(newStatus)]
 	if !ok {
 		return nil, errors.New("estado de ticket inválido")
@@ -443,6 +466,14 @@ func (s *ticketService) AssignTicket(userObjectID primitive.ObjectID, role strin
 	dbT, err := s.ticketRepo.GetTicketByID(ticketID)
 	if err != nil {
 		return nil, err
+	}
+
+	// Access Control: if ticket is assigned to an agent, only that agent can reassign it
+	roleLower := strings.ToLower(role)
+	if roleLower == "agent" || roleLower == "owner" || roleLower == "admin" {
+		if dbT.AssignedTo != nil && *dbT.AssignedTo != userObjectID {
+			return nil, errors.New("solo el agente asignado puede reasignar este ticket")
+		}
 	}
 
 	agent, err := s.ticketRepo.FindUserByID(agentObjectID)
