@@ -206,7 +206,7 @@ export interface Institution {
         <!-- List View (Mis Tickets / Tickets de Soporte) -->
         <div class="ticket-history-card">
           <div class="history-header">
-            <h2>{{ currentUserRole() === 'user' ? 'Mis tickets' : 'Tickets de soporte' }}</h2>
+            <h2>{{ currentUserRole() === 'user' ? 'Mis tickets' : 'Panel de Agente' }}</h2>
             @if (currentUserRole() === 'user') {
               <button class="new-ticket-btn" (click)="setViewMode('create')">
                 + Nuevo ticket
@@ -215,8 +215,50 @@ export interface Institution {
           </div>
 
           @if (currentUserRole() !== 'user') {
+            <!-- 6 Stat Cards -->
+            <div class="agent-stats-row">
+              <div class="stat-card total" (click)="setStatusFilter('todos')" style="cursor: pointer;">
+                <span class="stat-label">Total</span>
+                <span class="stat-value">{{ statsTotal() }}</span>
+              </div>
+              <div class="stat-card abiertos" (click)="setStatusFilter('abierto')" style="cursor: pointer;">
+                <span class="stat-label">Abiertos</span>
+                <span class="stat-value">{{ statsAbiertos() }}</span>
+              </div>
+              <div class="stat-card progreso" (click)="setStatusFilter('en_progreso')" style="cursor: pointer;">
+                <span class="stat-label">En progreso</span>
+                <span class="stat-value">{{ statsProgreso() }}</span>
+              </div>
+              <div class="stat-card reabiertos" (click)="setStatusFilter('reabierto')" style="cursor: pointer;">
+                <span class="stat-label">Reabiertos</span>
+                <span class="stat-value">{{ statsReabiertos() }}</span>
+              </div>
+              <div class="stat-card transferidos" (click)="setStatusFilter('transferido')" style="cursor: pointer;">
+                <span class="stat-label">Transferidos</span>
+                <span class="stat-value">{{ statsTransferidos() }}</span>
+              </div>
+              <div class="stat-card resueltos" (click)="setStatusFilter('resuelto')" style="cursor: pointer;">
+                <span class="stat-label">Resueltos</span>
+                <span class="stat-value">{{ statsResueltos() }}</span>
+              </div>
+            </div>
+
             <!-- Agent Filter Tabs & Search Bar -->
             <div class="agent-tabs-container">
+              <!-- Search input -->
+              <div class="agent-search-bar">
+                <span class="material-icons search-icon">search</span>
+                <input 
+                  type="text" 
+                  placeholder="Buscar por usuario, institución o ID..."
+                  (input)="onSearchInput($event)"
+                />
+              </div>
+
+              <!-- Filter funnel icon -->
+              <span class="material-icons" style="color: #90A4AE; font-size: 20px; flex-shrink: 0; margin-left: 4px;">filter_alt</span>
+
+              <!-- Horizontal pills -->
               <div class="agent-tabs">
                 <button 
                   class="agent-tab-btn" 
@@ -230,21 +272,28 @@ export interface Institution {
                   [class.active]="selectedStatusFilter() === 'abierto'"
                   (click)="setStatusFilter('abierto')"
                 >
-                  Abiertos
+                  Abierto
                 </button>
                 <button 
                   class="agent-tab-btn" 
-                  [class.active]="selectedStatusFilter() === 'progreso'"
-                  (click)="setStatusFilter('progreso')"
+                  [class.active]="selectedStatusFilter() === 'en_progreso'"
+                  (click)="setStatusFilter('en_progreso')"
                 >
-                  En Progreso
+                  En progreso
+                </button>
+                <button 
+                  class="agent-tab-btn" 
+                  [class.active]="selectedStatusFilter() === 'reabierto'"
+                  (click)="setStatusFilter('reabierto')"
+                >
+                  Reabierto
                 </button>
                 <button 
                   class="agent-tab-btn" 
                   [class.active]="selectedStatusFilter() === 'transferido'"
                   (click)="setStatusFilter('transferido')"
                 >
-                  Transferidos
+                  Transferido
                 </button>
                 <button 
                   class="agent-tab-btn" 
@@ -253,16 +302,13 @@ export interface Institution {
                 >
                   Resuelto
                 </button>
-              </div>
-
-              <!-- Search input -->
-              <div class="agent-search-bar">
-                <span class="material-icons search-icon">search</span>
-                <input 
-                  type="text" 
-                  placeholder="Buscar por título, descripción, institución, DNI o email..."
-                  (input)="onSearchInput($event)"
-                />
+                <button 
+                  class="agent-tab-btn" 
+                  [class.active]="selectedStatusFilter() === 'cerrado'"
+                  (click)="setStatusFilter('cerrado')"
+                >
+                  Cerrado
+                </button>
               </div>
             </div>
           }
@@ -1648,61 +1694,111 @@ export interface Institution {
       align-self: center;
     }
 
-    .agent-tabs-container {
+    .agent-stats-row {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+      margin-top: 12px;
+    }
+
+    .stat-card {
+      background: white;
+      border: 1px solid var(--color-border);
+      border-radius: 12px;
+      padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    .stat-card .stat-label {
+      font-family: var(--font-body);
+      font-size: 13px;
+      color: var(--color-text-muted);
+      font-weight: 500;
+    }
+
+    .stat-card .stat-value {
+      font-family: var(--font-heading);
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    /* Colors for values */
+    .stat-card.total .stat-value { color: #37474F; }
+    .stat-card.abiertos .stat-value { color: #2E9E7A; }
+    .stat-card.progreso .stat-value { color: #E07B00; }
+    .stat-card.reabiertos .stat-value { color: #C2185B; }
+    .stat-card.transferidos .stat-value { color: #1565C0; }
+    .stat-card.resueltos .stat-value { color: #455A64; }
+
+    .agent-tabs-container {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 16px;
       margin-bottom: 16px;
       padding: 0 4px;
+      width: 100%;
     }
 
     .agent-tabs {
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
-      border-bottom: 1px solid var(--color-border);
-      padding-bottom: 8px;
+      border: none;
+      padding-bottom: 0;
+      align-items: center;
     }
 
     .agent-tab-btn {
-      padding: 8px 16px;
-      border: none;
-      background: none;
-      font-family: var(--font-heading);
+      padding: 6px 16px;
+      border: 1px solid #E0E0E0;
+      background: white;
+      font-family: var(--font-body);
       font-size: 13px;
-      font-weight: 600;
-      color: var(--color-text-secondary);
+      font-weight: 500;
+      color: #546E7A;
       cursor: pointer;
-      position: relative;
-      transition: color 0.2s ease;
+      border-radius: 20px; /* Rounded pill style */
+      transition: all 0.2s ease;
+      outline: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
     .agent-tab-btn:hover {
-      color: var(--color-accent-teal);
+      border-color: #B0BEC5;
+      color: #37474F;
+      background-color: #F5F7F8;
     }
     .agent-tab-btn.active {
-      color: var(--color-accent-teal);
-    }
-    .agent-tab-btn.active::after {
-      content: '';
-      position: absolute;
-      bottom: -9px;
-      left: 0;
-      width: 100%;
-      height: 3px;
-      background-color: var(--color-accent-teal);
-      border-radius: 3px 3px 0 0;
+      background-color: #2C2A38; /* Dark background matching screenshot */
+      color: white;
+      border-color: #2C2A38;
+      font-weight: 600;
     }
 
     .agent-search-bar {
       display: flex;
       align-items: center;
-      background-color: var(--color-bg-secondary);
+      background-color: #FAFAFA;
       border: 1.5px solid var(--color-border);
-      border-radius: var(--radius-input);
-      padding: 0 12px;
+      border-radius: 20px; /* Fully rounded search input */
+      padding: 0 16px;
       height: 40px;
       gap: 8px;
       transition: border-color 0.2s ease;
+      width: 320px; /* Reasonable fixed width for the search bar */
+      flex-shrink: 0;
     }
     .agent-search-bar:focus-within {
       border-color: var(--color-accent-teal);
@@ -1797,8 +1893,16 @@ export class TicketsTabComponent implements OnInit {
   private http = inject(HttpClient);
 
   readTicketIds = signal<string[]>([]);
-  selectedStatusFilter = signal<'todos' | 'abierto' | 'progreso' | 'transferido' | 'resuelto'>('todos');
+  selectedStatusFilter = signal<'todos' | 'abierto' | 'en_progreso' | 'reabierto' | 'transferido' | 'resuelto' | 'cerrado'>('todos');
   searchQuery = signal<string>('');
+
+  // Agent dynamic statistics cards
+  statsTotal = computed(() => this.ticketService.tickets().length);
+  statsAbiertos = computed(() => this.ticketService.tickets().filter(t => t.status === 'abierto').length);
+  statsProgreso = computed(() => this.ticketService.tickets().filter(t => t.status === 'en_progreso').length);
+  statsReabiertos = computed(() => this.ticketService.tickets().filter(t => t.status === 'reabierto').length);
+  statsTransferidos = computed(() => this.ticketService.tickets().filter(t => t.status === 'transferido').length);
+  statsResueltos = computed(() => this.ticketService.tickets().filter(t => t.status === 'resuelto').length);
 
   @Input() set viewMode(mode: 'create' | 'list' | 'detail') {
     this.innerViewMode.set(mode);
@@ -1860,12 +1964,16 @@ export class TicketsTabComponent implements OnInit {
       // Agent status tab filters
       if (filter === 'abierto') {
         filtered = filtered.filter(t => t.status === 'abierto' && !t.assigned_to);
-      } else if (filter === 'progreso') {
-        filtered = filtered.filter(t => t.assigned_to === currentUserId && (t.status === 'en_progreso' || t.status === 'reabierto'));
+      } else if (filter === 'en_progreso') {
+        filtered = filtered.filter(t => t.assigned_to === currentUserId && t.status === 'en_progreso');
+      } else if (filter === 'reabierto') {
+        filtered = filtered.filter(t => t.assigned_to === currentUserId && t.status === 'reabierto');
       } else if (filter === 'transferido') {
         filtered = filtered.filter(t => t.assigned_to === currentUserId && t.status === 'transferido');
       } else if (filter === 'resuelto') {
-        filtered = filtered.filter(t => t.assigned_to === currentUserId && (t.status === 'resuelto' || t.status === 'cerrado'));
+        filtered = filtered.filter(t => t.assigned_to === currentUserId && t.status === 'resuelto');
+      } else if (filter === 'cerrado') {
+        filtered = filtered.filter(t => t.assigned_to === currentUserId && t.status === 'cerrado');
       }
 
       // Search query filtering
@@ -2381,7 +2489,7 @@ export class TicketsTabComponent implements OnInit {
     return agentId;
   }
 
-  setStatusFilter(filter: 'todos' | 'abierto' | 'progreso' | 'transferido' | 'resuelto'): void {
+  setStatusFilter(filter: 'todos' | 'abierto' | 'en_progreso' | 'reabierto' | 'transferido' | 'resuelto' | 'cerrado'): void {
     this.selectedStatusFilter.set(filter);
   }
 
