@@ -40,6 +40,22 @@ export interface Institution {
             <div class="form-columns">
               <!-- Left Column -->
               <div class="form-col">
+                <!-- Title -->
+                <div class="form-group">
+                  <label>Título del error o solicitud *</label>
+                  <div class="input-container">
+                    <span class="material-icons input-icon">title</span>
+                    <input 
+                      type="text" 
+                      formControlName="title" 
+                      placeholder="Ej: Error al firmar documento / cargar Historia Clínica"
+                    />
+                  </div>
+                  @if (showError('title')) {
+                    <span class="error-text">El título es obligatorio</span>
+                  }
+                </div>
+
                 <!-- Email -->
                 <div class="form-group">
                   <label>Email institucional *</label>
@@ -330,10 +346,10 @@ export interface Institution {
                   
                   <div class="item-content">
                     <div class="item-top-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%;">
-                      <!-- Left elements: Person Info -> Institution -> Priority -> Date -->
+                      <!-- Left elements: Person Info (or Title if User) -> Institution -> Priority -> Date -->
                       <div class="top-row-left" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--color-text-muted); font-size: 12px;">
                         <span class="user-display-name" style="font-weight: 700; font-size: 15px; color: var(--color-text-primary); margin-right: 4px;">
-                          {{ getTicketUserFirstName(ticket.user_id) }}
+                          {{ currentUserRole() === 'user' ? ticket.title : getTicketUserFirstName(ticket.user_id) }}
                         </span>
                         <span class="institution-name-card" style="font-weight: 500;">{{ ticket.institution }}</span>
                         <span class="separator-dot" style="color: var(--color-border); margin: 0 2px;">•</span>
@@ -374,9 +390,15 @@ export interface Institution {
                     </div>
 
                     <!-- Body Preview (Description) -->
-                    <p class="body-preview" style="margin-top: 6px; margin-bottom: 6px; line-height: 1.4; color: var(--color-text-secondary); font-size: 13px;">
-                      {{ ticket.description }}
-                    </p>
+                    @if (currentUserRole() === 'user') {
+                      <p class="body-preview" style="margin-top: 6px; margin-bottom: 6px; line-height: 1.4; color: var(--color-text-secondary); font-size: 13px;">
+                        {{ ticket.description }}
+                      </p>
+                    } @else {
+                      <p class="body-preview" style="margin-top: 6px; margin-bottom: 6px; line-height: 1.4; color: var(--color-text-secondary); font-size: 13px;">
+                        <strong style="color: var(--color-text-primary); font-weight: 600;">{{ ticket.title }}</strong> - {{ ticket.description }}
+                      </p>
+                    }
 
                     <!-- Assigned to Name (visible in "Todos" list if assigned to someone else) -->
                     @if (currentUserRole() !== 'user' && ticket.assigned_to) {
@@ -631,15 +653,6 @@ export interface Institution {
               <div class="comments-section">
                 <h3>Historial de Mensajes y Respuestas</h3>
                 <div class="comments-list">
-                  <!-- First comment is always the initial description -->
-                  <div class="comment-item user">
-                    <div class="comment-header">
-                      <span class="comment-sender">{{ getTicketUserFirstName(ticket.user_id) }} (Usuario)</span>
-                      <span class="comment-time">{{ ticket.created_at | date:'dd/MM/yyyy HH:mm' }}</span>
-                    </div>
-                    <p class="comment-body">{{ ticket.description }}</p>
-                  </div>
-
                   <!-- Render custom messages/comments -->
                   @for (comment of ticketComments(); track comment.id) {
                     <div class="comment-item" [ngClass]="comment.role">
@@ -2138,6 +2151,7 @@ export class TicketsTabComponent implements OnInit {
 
   private initForm(): void {
     this.ticketForm = this.fb.group({
+      title: ['', Validators.required],
       email: ['', [Validators.required, Validators.email]],
       institution: ['', Validators.required],
       description: ['', Validators.required]
@@ -2232,6 +2246,7 @@ export class TicketsTabComponent implements OnInit {
       formVals.email,
       formVals.institution,
       this.selectedPriority(),
+      formVals.title,
       formVals.description,
       this.selectedTags(),
       this.attachments()
@@ -2355,20 +2370,25 @@ export class TicketsTabComponent implements OnInit {
     return name.substring(0, 1).toUpperCase();
   }
 
+  formatDisplayName(name: string): string {
+    if (!name) return '';
+    const raw = name.split('@')[0];
+    const words = raw.replace(/[._-]/g, ' ').split(/\s+/);
+    return words
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ');
+  }
+
   getTicketUserFirstName(userId: string): string {
     if (!userId) return 'Usuario';
-    return userId.split('@')[0];
+    return this.formatDisplayName(userId);
   }
 
   getCommentSender(comment: TicketMessage): string {
-    const name = comment.sender_id.split('@')[0];
-    if (comment.role === 'user') {
-      return `${name} (Usuario)`;
-    } else if (comment.role === 'agent') {
-      return `${name} (Soporte Técnico)`;
-    } else {
-      return 'Asistente Virtual (Bot)';
+    if (comment.role === 'bot') {
+      return 'Asistente Virtual';
     }
+    return this.formatDisplayName(comment.sender_id);
   }
 
   getUserInitials(): string {
@@ -2484,9 +2504,9 @@ export class TicketsTabComponent implements OnInit {
   getAgentName(agentId: string): string {
     const agent = this.agentsList().find(a => a.id === agentId);
     if (agent) {
-      return `${agent.first_name} ${agent.last_name}`;
+      return this.formatDisplayName(`${agent.first_name} ${agent.last_name}`);
     }
-    return agentId;
+    return this.formatDisplayName(agentId);
   }
 
   setStatusFilter(filter: 'todos' | 'abierto' | 'en_progreso' | 'reabierto' | 'transferido' | 'resuelto' | 'cerrado'): void {

@@ -117,12 +117,12 @@ export class TicketService {
     email: string,
     institution: string,
     priority: 'Baja' | 'Media' | 'Alta',
+    title: string,
     description: string,
     tags: string[],
     attachments: string[]
   ): Observable<any> {
     const token = this.auth.token();
-    const title = description.length > 60 ? description.substring(0, 57) + '...' : description;
 
     return this.http.post<any>(`${this.apiUrl}/tickets`, {
       title,
