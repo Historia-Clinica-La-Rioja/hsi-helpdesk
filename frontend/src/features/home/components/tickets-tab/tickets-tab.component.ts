@@ -1,4 +1,5 @@
-import { Component, Input, Output, EventEmitter, inject, signal, computed, effect, OnInit } from '@angular/core';
+
+import { Component, Input, Output, EventEmitter, inject, signal, computed, effect, OnInit, DestroyRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
@@ -39,6 +40,22 @@ export interface Institution {
             <div class="form-columns">
               <!-- Left Column -->
               <div class="form-col">
+                <!-- Title -->
+                <div class="form-group">
+                  <label>Título del error o solicitud *</label>
+                  <div class="input-container">
+                    <span class="material-icons input-icon">title</span>
+                    <input 
+                      type="text" 
+                      formControlName="title" 
+                      placeholder="Ej: Error al firmar documento / cargar Historia Clínica"
+                    />
+                  </div>
+                  @if (showError('title')) {
+                    <span class="error-text">El título es obligatorio</span>
+                  }
+                </div>
+
                 <!-- Email -->
                 <div class="form-group">
                   <label>Email institucional *</label>
@@ -202,16 +219,115 @@ export interface Institution {
           </form>
         </div>
       } @else if (innerViewMode() === 'list') {
-        <!-- List View (Mis Tickets) -->
+        <!-- List View (Mis Tickets / Tickets de Soporte) -->
         <div class="ticket-history-card">
           <div class="history-header">
-            <h2>{{ currentUserRole() === 'user' ? 'Mis tickets' : 'Tickets de soporte' }}</h2>
+            <h2>{{ currentUserRole() === 'user' ? 'Mis tickets' : 'Panel de Agente' }}</h2>
             @if (currentUserRole() === 'user') {
               <button class="new-ticket-btn" (click)="setViewMode('create')">
                 + Nuevo ticket
               </button>
             }
           </div>
+
+          @if (currentUserRole() !== 'user') {
+            <!-- 6 Stat Cards -->
+            <div class="agent-stats-row">
+              <div class="stat-card total" (click)="setStatusFilter('todos')" style="cursor: pointer;">
+                <span class="stat-label">Total</span>
+                <span class="stat-value">{{ statsTotal() }}</span>
+              </div>
+              <div class="stat-card abiertos" (click)="setStatusFilter('abierto')" style="cursor: pointer;">
+                <span class="stat-label">Abiertos</span>
+                <span class="stat-value">{{ statsAbiertos() }}</span>
+              </div>
+              <div class="stat-card progreso" (click)="setStatusFilter('en_progreso')" style="cursor: pointer;">
+                <span class="stat-label">En progreso</span>
+                <span class="stat-value">{{ statsProgreso() }}</span>
+              </div>
+              <div class="stat-card reabiertos" (click)="setStatusFilter('reabierto')" style="cursor: pointer;">
+                <span class="stat-label">Reabiertos</span>
+                <span class="stat-value">{{ statsReabiertos() }}</span>
+              </div>
+              <div class="stat-card transferidos" (click)="setStatusFilter('transferido')" style="cursor: pointer;">
+                <span class="stat-label">Transferidos</span>
+                <span class="stat-value">{{ statsTransferidos() }}</span>
+              </div>
+              <div class="stat-card resueltos" (click)="setStatusFilter('resuelto')" style="cursor: pointer;">
+                <span class="stat-label">Resueltos</span>
+                <span class="stat-value">{{ statsResueltos() }}</span>
+              </div>
+            </div>
+
+            <!-- Agent Filter Tabs & Search Bar -->
+            <div class="agent-tabs-container">
+              <!-- Search input -->
+              <div class="agent-search-bar">
+                <span class="material-icons search-icon">search</span>
+                <input 
+                  type="text" 
+                  placeholder="Buscar por usuario, institución o ID..."
+                  (input)="onSearchInput($event)"
+                />
+              </div>
+
+              <!-- Filter funnel icon -->
+              <span class="material-icons" style="color: #90A4AE; font-size: 20px; flex-shrink: 0; margin-left: 4px;">filter_alt</span>
+
+              <!-- Horizontal pills -->
+              <div class="agent-tabs">
+                <button 
+                  class="agent-tab-btn" 
+                  [class.active]="selectedStatusFilter() === 'todos'"
+                  (click)="setStatusFilter('todos')"
+                >
+                  Todos
+                </button>
+                <button 
+                  class="agent-tab-btn" 
+                  [class.active]="selectedStatusFilter() === 'abierto'"
+                  (click)="setStatusFilter('abierto')"
+                >
+                  Abierto
+                </button>
+                <button 
+                  class="agent-tab-btn" 
+                  [class.active]="selectedStatusFilter() === 'en_progreso'"
+                  (click)="setStatusFilter('en_progreso')"
+                >
+                  En progreso
+                </button>
+                <button 
+                  class="agent-tab-btn" 
+                  [class.active]="selectedStatusFilter() === 'reabierto'"
+                  (click)="setStatusFilter('reabierto')"
+                >
+                  Reabierto
+                </button>
+                <button 
+                  class="agent-tab-btn" 
+                  [class.active]="selectedStatusFilter() === 'transferido'"
+                  (click)="setStatusFilter('transferido')"
+                >
+                  Transferido
+                </button>
+                <button 
+                  class="agent-tab-btn" 
+                  [class.active]="selectedStatusFilter() === 'resuelto'"
+                  (click)="setStatusFilter('resuelto')"
+                >
+                  Resuelto
+                </button>
+                <button 
+                  class="agent-tab-btn" 
+                  [class.active]="selectedStatusFilter() === 'cerrado'"
+                  (click)="setStatusFilter('cerrado')"
+                >
+                  Cerrado
+                </button>
+              </div>
+            </div>
+          }
           
           <div class="separator"></div>
 
@@ -229,35 +345,100 @@ export interface Institution {
                   </div>
                   
                   <div class="item-content">
-                    <div class="item-top-row">
-                      <span class="user-display-name" style="font-weight: 700; font-size: 15px;">{{ currentUserRole() === 'user' ? ticket.title : ticket.user_id }}</span>
-                      
-                      <!-- Status badge -->
-                      <span class="status-badge" [ngClass]="ticket.status">
-                        {{ getStatusLabel(ticket.status) }}
-                      </span>
+                    <div class="item-top-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%;">
+                      <!-- Left elements: Person Info (or Title if User) -> Institution -> Priority -> Date -->
+                      <div class="top-row-left" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--color-text-muted); font-size: 12px;">
+                        <span class="user-display-name" style="font-weight: 700; font-size: 15px; color: var(--color-text-primary); margin-right: 4px;">
+                          {{ currentUserRole() === 'user' ? ticket.title : getTicketUserFirstName(ticket.user_id) }}
+                        </span>
+                        <span class="institution-name-card" style="font-weight: 500;">{{ ticket.institution }}</span>
+                        <span class="separator-dot" style="color: var(--color-border); margin: 0 2px;">•</span>
+                        <!-- Priority Badge -->
+                        <span class="card-priority-dot-indicator" [ngClass]="ticket.priority.toLowerCase()">
+                          <span class="priority-bullet">•</span>
+                          <span>{{ ticket.priority }}</span>
+                        </span>
+                        <span class="separator-dot" style="color: var(--color-border); margin: 0 2px;">•</span>
+                        <span class="card-date-timestamp" style="font-weight: 500;">{{ ticket.created_at | date:'dd/MM/yyyy HH:mm' }}</span>
+                      </div>
+
+                      <!-- Right elements: State Badges -> Nuevo Badge -> Time Elapsed -->
+                      <div class="top-row-right" style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+                        <!-- Status Badges -->
+                        <span class="status-badge" [ngClass]="ticket.status">
+                          {{ getStatusLabel(ticket.status) }}
+                        </span>
+                        @if (ticket.status === 'transferido' || ticket.status === 'reabierto') {
+                          <span class="status-badge en_progreso">
+                            En progreso
+                          </span>
+                        }
+                        @if (ticket.status === 'resuelto' || ticket.status === 'cerrado') {
+                          <span class="status-badge cerrado">
+                            Cerrado
+                          </span>
+                        }
+
+                        <!-- Nuevo Badge -->
+                        @if (currentUserRole() !== 'user' && !isTicketRead(ticket.id) && ticket.status !== 'resuelto' && ticket.status !== 'cerrado') {
+                          <span class="new-ticket-badge">Nuevo</span>
+                        }
+
+                        <!-- Elapsed Time Pill -->
+                        <span class="time-elapsed-pill">{{ getElapsedText(ticket.created_at) }}</span>
+                      </div>
                     </div>
 
-                    <div class="item-meta-row">
-                      <span class="creator-name-text" style="font-weight: 600; color: var(--color-accent-teal);">Por {{ getTicketUserFirstName(ticket.user_id) }}</span>
-                      <span class="separator-dot" style="color: var(--color-border); margin: 0 4px;">•</span>
-                      <span class="date-text">{{ ticket.created_at | date:'dd/MM/yyyy HH:mm' }}</span>
-                      <span class="time-elapsed-pill">{{ getElapsedText(ticket.created_at) }}</span>
-                    </div>
-
+                    <!-- Body Preview (Description) -->
                     @if (currentUserRole() === 'user') {
-                      <p class="body-preview">{{ ticket.description }}</p>
+                      <p class="body-preview" style="margin-top: 6px; margin-bottom: 6px; line-height: 1.4; color: var(--color-text-secondary); font-size: 13px;">
+                        {{ ticket.description }}
+                      </p>
                     } @else {
-                      <p class="body-preview"><strong style="color: var(--color-text-primary); font-weight: 600;">{{ ticket.title }}</strong> - {{ ticket.description }}</p>
+                      <p class="body-preview" style="margin-top: 6px; margin-bottom: 6px; line-height: 1.4; color: var(--color-text-secondary); font-size: 13px;">
+                        <strong style="color: var(--color-text-primary); font-weight: 600;">{{ ticket.title }}</strong> - {{ ticket.description }}
+                      </p>
                     }
 
-                    <div class="item-tags-row">
+                    <!-- Assigned to Name (visible in "Todos" list if assigned to someone else) -->
+                    @if (currentUserRole() !== 'user' && ticket.assigned_to) {
+                      <div class="card-timestamp-info-row" style="color: var(--bot-blue); font-weight: 600; margin-bottom: 6px; padding: 2px 0; font-size: 12px; display: flex; align-items: center; gap: 4px;">
+                        <span class="material-icons" style="font-size: 14px; vertical-align: middle;">assignment_ind</span>
+                        <span>Asignado a: {{ getAgentName(ticket.assigned_to) }}</span>
+                      </div>
+                    }
+
+                    <!-- Reopened/Closed/Edited Timestamps for Admin -->
+                    @if (currentUserRole() !== 'user') {
+                      <div class="agent-card-timestamps" style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px;">
+                        @if (ticket.status === 'reabierto' && ticket.reopened_at) {
+                          <div class="card-timestamp-info-row reopened" style="font-size: 12px; display: flex; align-items: center; gap: 4px;">
+                            <span class="material-icons" style="font-size: 14px; vertical-align: middle;">history</span>
+                            <span>Reabierto el {{ ticket.reopened_at | date:'dd/MM/yyyy HH:mm' }}</span>
+                          </div>
+                        }
+                        @if ((ticket.status === 'resuelto' || ticket.status === 'cerrado') && ticket.resolved_at) {
+                          <div class="card-timestamp-info-row closed" style="font-size: 12px; display: flex; align-items: center; gap: 4px;">
+                            <span class="material-icons" style="font-size: 14px; vertical-align: middle;">check_circle</span>
+                            <span>Resuelto el {{ ticket.resolved_at | date:'dd/MM/yyyy HH:mm' }}</span>
+                          </div>
+                        }
+                        @if (ticket.editCount && ticket.editCount >= 1) {
+                          <div class="card-timestamp-info-row edited" style="font-size: 12px; display: flex; align-items: center; gap: 4px;">
+                            <span class="material-icons" style="font-size: 14px; vertical-align: middle;">edit_note</span>
+                            <span>Modificado el {{ (ticket.updated_at || ticket.created_at) | date:'dd/MM/yyyy HH:mm' }}</span>
+                          </div>
+                        }
+                      </div>
+                    }
+
+                    <!-- Bottom Tags row -->
+                    <div class="item-tags-row" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px;">
                       @for (t of ticket.tags; track t) {
                         <span class="item-tag-chip">{{ t }}</span>
                       }
                       @if (ticket.attachments.length > 0) {
                         <span class="attachment-indicator">
-                          <span class="material-icons">attachment</span>
                           Archivo adjunto
                         </span>
                       }
@@ -311,14 +492,50 @@ export interface Institution {
                   </div>
                   <div class="info-block">
                     <span class="info-label">Estado</span>
-                    <span class="status-badge" [ngClass]="ticket.status">
-                      {{ getStatusLabel(ticket.status) }}
-                    </span>
+                    <div style="display: inline-flex; gap: 4px; align-items: center;">
+                      <span class="status-badge" [ngClass]="ticket.status">
+                        {{ getStatusLabel(ticket.status) }}
+                      </span>
+                      @if (ticket.status === 'transferido' || ticket.status === 'reabierto') {
+                        <span class="status-badge en_progreso">
+                          En progreso
+                        </span>
+                      }
+                      @if (ticket.status === 'resuelto' || ticket.status === 'cerrado') {
+                        <span class="status-badge cerrado">
+                          Cerrado
+                        </span>
+                      }
+                    </div>
                   </div>
                   <div class="info-block">
                     <span class="info-label">Creado</span>
                     <span class="info-value">{{ ticket.created_at | date:'dd/MM/yyyy HH:mm' }}</span>
                   </div>
+                  @if (ticket.assigned_to) {
+                    <div class="info-block">
+                      <span class="info-label">Asignado a</span>
+                      <span class="info-value" style="color: var(--bot-blue);">{{ getAgentName(ticket.assigned_to) }}</span>
+                    </div>
+                  }
+                  @if (ticket.status === 'reabierto' && ticket.reopened_at) {
+                    <div class="info-block">
+                      <span class="info-label">Reabierto</span>
+                      <span class="info-value" style="color: #C71585; font-weight: 600;">{{ ticket.reopened_at | date:'dd/MM/yyyy HH:mm' }}</span>
+                    </div>
+                  }
+                  @if ((ticket.status === 'resuelto' || ticket.status === 'cerrado') && ticket.resolved_at) {
+                    <div class="info-block">
+                      <span class="info-label">Resuelto/Cerrado</span>
+                      <span class="info-value" style="color: #2E7D32; font-weight: 600;">{{ ticket.resolved_at | date:'dd/MM/yyyy HH:mm' }}</span>
+                    </div>
+                  }
+                  @if (ticket.editCount && ticket.editCount >= 1) {
+                    <div class="info-block">
+                      <span class="info-label">Última Edición</span>
+                      <span class="info-value" style="color: #455A64; font-weight: 600;">{{ (ticket.updated_at || ticket.created_at) | date:'dd/MM/yyyy HH:mm' }}</span>
+                    </div>
+                  }
                 </div>
 
                 <div class="detail-description-section">
@@ -327,72 +544,51 @@ export interface Institution {
                 </div>
 
                 @if (currentUserRole() !== 'user') {
-                  <div class="admin-controls-card">
-                    <h4>Acciones de Soporte Técnico</h4>
-                    <div class="admin-actions-toolbar">
-                      <!-- Quick Status Buttons -->
-                      <div class="status-buttons-group">
-                        <span class="control-label">Cambiar Estado</span>
-                        <div class="btn-group">
-                          <button 
-                            type="button" 
-                            class="status-btn btn-abierto"
-                            [class.active]="ticket.status === 'abierto'"
-                            (click)="changeStatusQuick(ticket.id, 'abierto')"
-                          >
-                            Abierto
-                          </button>
-                          <button 
-                            type="button" 
-                            class="status-btn btn-progreso"
-                            [class.active]="ticket.status === 'en_progreso'"
-                            (click)="changeStatusQuick(ticket.id, 'en_progreso')"
-                          >
-                            En Progreso
-                          </button>
-                          <button 
-                            type="button" 
-                            class="status-btn btn-resuelto"
-                            [class.active]="ticket.status === 'resuelto'"
-                            (click)="changeStatusQuick(ticket.id, 'resuelto')"
-                          >
-                            Resuelto
-                          </button>
-                          <button 
-                            type="button" 
-                            class="status-btn btn-cerrado"
-                            [class.active]="ticket.status === 'cerrado'"
-                            (click)="changeStatusQuick(ticket.id, 'cerrado')"
-                          >
-                            Cerrado
-                          </button>
-                          <button 
-                            type="button" 
-                            class="status-btn btn-reabierto"
-                            [class.active]="ticket.status === 'reabierto'"
-                            (click)="changeStatusQuick(ticket.id, 'reabierto')"
-                          >
-                            Reabierto
-                          </button>
+                  @if (!ticket.assigned_to || ticket.assigned_to === currentUserId()) {
+                    <div class="admin-controls-card">
+                      <h4>Acciones de Soporte Técnico</h4>
+                      <div class="admin-actions-toolbar">
+                        <!-- Resolve Action Button -->
+                        <div class="status-buttons-group">
+                          @if (ticket.status !== 'resuelto' && ticket.status !== 'cerrado') {
+                            <button 
+                              type="button" 
+                              class="resolve-action-btn"
+                              (click)="changeStatusQuick(ticket.id, 'resuelto')"
+                            >
+                              <span class="material-icons" style="font-size: 16px; vertical-align: middle;">task_alt</span>
+                              Resolver Ticket
+                            </button>
+                          } @else {
+                            <div class="ticket-resolved-badge-large">
+                              <span class="material-icons" style="font-size: 18px; vertical-align: middle;">check_circle</span>
+                              Ticket Resuelto y Cerrado
+                            </div>
+                          }
+                        </div>
+
+                        <div class="separator-v"></div>
+
+                        <!-- Assignment Dropdown -->
+                        <div class="admin-control-group">
+                          <label class="control-label">Transferir Ticket</label>
+                          <select [value]="ticket.assigned_to || ''" (change)="onAssignChange(ticket.id, $event)">
+                            <option value="">-- Seleccionar Agente --</option>
+                            @for (agent of agentsList(); track agent.id) {
+                              <option [value]="agent.id">
+                                {{ agent.first_name }} {{ agent.last_name }} ({{ agent.username }})
+                              </option>
+                            }
+                          </select>
                         </div>
                       </div>
-
-                      <div class="separator-v"></div>
-
-                      <!-- Assignment Dropdown -->
-                      <div class="admin-control-group">
-                        <label class="control-label">Transferir Ticket</label>
-                        <select [value]="ticket.assigned_to || ''" (change)="onAssignChange(ticket.id, $event)">
-                          <option value="">-- Seleccionar Agente --</option>
-                          @for (agent of agentsList(); track agent.id) {
-                            <option [value]="agent.id">
-                              {{ agent.first_name }} {{ agent.last_name }} ({{ agent.username }})
-                            </option>
-                          }
-                        </select>
-                      </div>
                     </div>
-                  </div>
+                  } @else {
+                    <div class="admin-controls-card info-only" style="background: #E3F2FD; border: 1px solid #BBDEFB; padding: 15px; border-radius: 8px; color: #0D47A1; font-weight: 500; display: flex; align-items: center; gap: 8px;">
+                      <span class="material-icons">info</span>
+                      <span>Este ticket está asignado a <strong>{{ getAgentName(ticket.assigned_to) }}</strong>. Solo el agente asignado puede responder o resolver este ticket.</span>
+                    </div>
+                  }
                 }
 
                 @if (ticket.attachments.length > 0) {
@@ -457,15 +653,6 @@ export interface Institution {
               <div class="comments-section">
                 <h3>Historial de Mensajes y Respuestas</h3>
                 <div class="comments-list">
-                  <!-- First comment is always the initial description -->
-                  <div class="comment-item user">
-                    <div class="comment-header">
-                      <span class="comment-sender">{{ getTicketUserFirstName(ticket.user_id) }} (Usuario)</span>
-                      <span class="comment-time">{{ ticket.created_at | date:'dd/MM/yyyy HH:mm' }}</span>
-                    </div>
-                    <p class="comment-body">{{ ticket.description }}</p>
-                  </div>
-
                   <!-- Render custom messages/comments -->
                   @for (comment of ticketComments(); track comment.id) {
                     <div class="comment-item" [ngClass]="comment.role">
@@ -481,17 +668,24 @@ export interface Institution {
                 </div>
 
                 <!-- Add comment Form -->
-                <form class="add-comment-form" (submit)="onSubmitComment($event)">
-                  <textarea 
-                    [(ngModel)]="newCommentText" 
-                    name="newCommentText"
-                    [placeholder]="currentUserRole() === 'user' ? 'Escribí un comentario o respuesta para el equipo de soporte...' : 'Escribí una respuesta o comentario para el usuario...'"
-                    required
-                  ></textarea>
-                  <button type="submit" class="comment-submit-btn" [disabled]="!newCommentText.trim()">
-                    Enviar Comentario
-                  </button>
-                </form>
+                @if (currentUserRole() === 'user' || !ticket.assigned_to || ticket.assigned_to === currentUserId()) {
+                  <form class="add-comment-form" (submit)="onSubmitComment($event)">
+                    <textarea 
+                      [(ngModel)]="newCommentText" 
+                      name="newCommentText"
+                      [placeholder]="currentUserRole() === 'user' ? 'Escribí un comentario o respuesta para el equipo de soporte...' : 'Escribí una respuesta o comentario para el usuario...'"
+                      required
+                    ></textarea>
+                    <button type="submit" class="comment-submit-btn" [disabled]="!newCommentText.trim()">
+                      Enviar Comentario
+                    </button>
+                  </form>
+                } @else {
+                  <div class="comment-blocked-message" style="margin-top: 15px; padding: 15px; background: #FFF9C4; border-radius: 8px; color: #5D4037; font-weight: 500; text-align: center; border: 1px solid #FFF59D; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <span class="material-icons" style="vertical-align: middle;">lock</span>
+                    <span>Solo el agente asignado puede responder a este ticket.</span>
+                  </div>
+                }
               </div>
 
             </div>
@@ -882,21 +1076,86 @@ export interface Institution {
       padding: 4px 10px;
       border-radius: 12px;
       text-transform: capitalize;
+      border: 1px solid transparent;
+      display: inline-flex;
+      align-items: center;
     }
 
     .status-badge.abierto {
       background-color: #EDF8F6;
       color: #2E9E7A;
+      border-color: #C2EDE0;
     }
 
     .status-badge.en_progreso {
       background-color: #FFF3E0;
       color: #E07B00;
+      border-color: #FFE0B2;
+    }
+
+    .status-badge.transferido {
+      background-color: #E3F2FD;
+      color: #1565C0;
+      border-color: #BBDEFB;
+    }
+
+    .status-badge.reabierto {
+      background-color: #FCE4EC;
+      color: #C2185B;
+      border-color: #F8BBD0;
     }
 
     .status-badge.resuelto {
-      background-color: #EFEFEF;
-      color: var(--color-text-muted);
+      background-color: #F5F5F5;
+      color: #616161;
+      border-color: #E0E0E0;
+    }
+
+    .status-badge.cerrado {
+      background-color: #ECEFF1;
+      color: #37474F;
+      border-color: #CFD8DC;
+    }
+
+    .card-priority-dot-indicator {
+      font-family: var(--font-body);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .card-priority-dot-indicator.baja {
+      background-color: #F1F8E9;
+      color: #558B2F;
+      border: 1px solid #DCEDC8;
+    }
+    .card-priority-dot-indicator.baja .priority-bullet {
+      color: #7CB342;
+      font-size: 14px;
+      line-height: 1;
+    }
+    .card-priority-dot-indicator.media {
+      background-color: #FFFDE7;
+      color: #F57F17;
+      border: 1px solid #FFF9C4;
+    }
+    .card-priority-dot-indicator.media .priority-bullet {
+      color: #FBC02D;
+      font-size: 14px;
+      line-height: 1;
+    }
+    .card-priority-dot-indicator.alta {
+      background-color: #FFEBEE;
+      color: #C62828;
+      border: 1px solid #FFCDD2;
+    }
+    .card-priority-dot-indicator.alta .priority-bullet {
+      color: #E53935;
+      font-size: 14px;
+      line-height: 1;
     }
 
     .item-meta-row {
@@ -953,17 +1212,17 @@ export interface Institution {
     }
 
     .attachment-indicator {
-      display: flex;
+      display: inline-flex;
       align-items: center;
       gap: 4px;
       font-family: var(--font-body);
       font-size: 11px;
-      color: var(--color-accent-teal);
-      margin-left: auto;
-    }
-
-    .attachment-indicator .material-icons {
-      font-size: 14px;
+      font-weight: 600;
+      color: #0288D1;
+      background-color: #E1F5FE;
+      border: 1px solid #B3E5FC;
+      padding: 2px 10px;
+      border-radius: 12px;
     }
 
     .empty-state {
@@ -1447,6 +1706,195 @@ export interface Institution {
       background-color: var(--color-border);
       align-self: center;
     }
+
+    .agent-stats-row {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+      margin-top: 12px;
+    }
+
+    .stat-card {
+      background: white;
+      border: 1px solid var(--color-border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    .stat-card .stat-label {
+      font-family: var(--font-body);
+      font-size: 13px;
+      color: var(--color-text-muted);
+      font-weight: 500;
+    }
+
+    .stat-card .stat-value {
+      font-family: var(--font-heading);
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    /* Colors for values */
+    .stat-card.total .stat-value { color: #37474F; }
+    .stat-card.abiertos .stat-value { color: #2E9E7A; }
+    .stat-card.progreso .stat-value { color: #E07B00; }
+    .stat-card.reabiertos .stat-value { color: #C2185B; }
+    .stat-card.transferidos .stat-value { color: #1565C0; }
+    .stat-card.resueltos .stat-value { color: #455A64; }
+
+    .agent-tabs-container {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 16px;
+      padding: 0 4px;
+      width: 100%;
+    }
+
+    .agent-tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      border: none;
+      padding-bottom: 0;
+      align-items: center;
+    }
+
+    .agent-tab-btn {
+      padding: 6px 16px;
+      border: 1px solid #E0E0E0;
+      background: white;
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 500;
+      color: #546E7A;
+      cursor: pointer;
+      border-radius: 20px; /* Rounded pill style */
+      transition: all 0.2s ease;
+      outline: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .agent-tab-btn:hover {
+      border-color: #B0BEC5;
+      color: #37474F;
+      background-color: #F5F7F8;
+    }
+    .agent-tab-btn.active {
+      background-color: #2C2A38; /* Dark background matching screenshot */
+      color: white;
+      border-color: #2C2A38;
+      font-weight: 600;
+    }
+
+    .agent-search-bar {
+      display: flex;
+      align-items: center;
+      background-color: #FAFAFA;
+      border: 1.5px solid var(--color-border);
+      border-radius: 20px; /* Fully rounded search input */
+      padding: 0 16px;
+      height: 40px;
+      gap: 8px;
+      transition: border-color 0.2s ease;
+      width: 320px; /* Reasonable fixed width for the search bar */
+      flex-shrink: 0;
+    }
+    .agent-search-bar:focus-within {
+      border-color: var(--color-accent-teal);
+    }
+    .agent-search-bar input {
+      border: none;
+      background: transparent;
+      outline: none;
+      font-family: var(--font-body);
+      font-size: 14px;
+      color: var(--color-text-primary);
+      width: 100%;
+    }
+    .agent-search-bar .search-icon {
+      color: var(--color-text-secondary);
+      font-size: 20px;
+    }
+
+    .new-ticket-badge {
+      background-color: var(--bot-orange);
+      color: white;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .card-timestamp-info-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: var(--font-body);
+    }
+    .card-timestamp-info-row.reopened {
+      background-color: #FFF0F5;
+      color: #C71585;
+    }
+    .card-timestamp-info-row.closed {
+      background-color: #E8F5E9;
+      color: #2E7D32;
+    }
+    .card-timestamp-info-row.edited {
+      background-color: #ECEFF1;
+      color: #455A64;
+    }
+
+    .resolve-action-btn {
+      background-color: var(--color-success);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-family: var(--font-heading);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background-color 0.2s, transform 0.1s;
+      outline: none;
+    }
+    .resolve-action-btn:hover {
+      background-color: #2E7D32;
+    }
+    .resolve-action-btn:active {
+      transform: scale(0.97);
+    }
+    .ticket-resolved-badge-large {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--color-success);
+      font-family: var(--font-heading);
+      font-size: 14px;
+      font-weight: 600;
+    }
   `]
 })
 
@@ -1454,7 +1902,20 @@ export class TicketsTabComponent implements OnInit {
   private ticketService = inject(TicketService);
   private authService = inject(AuthService);
   private fb = inject(FormBuilder);
+  private destroyRef = inject(DestroyRef);
   private http = inject(HttpClient);
+
+  readTicketIds = signal<string[]>([]);
+  selectedStatusFilter = signal<'todos' | 'abierto' | 'en_progreso' | 'reabierto' | 'transferido' | 'resuelto' | 'cerrado'>('todos');
+  searchQuery = signal<string>('');
+
+  // Agent dynamic statistics cards
+  statsTotal = computed(() => this.ticketService.tickets().length);
+  statsAbiertos = computed(() => this.ticketService.tickets().filter(t => t.status === 'abierto').length);
+  statsProgreso = computed(() => this.ticketService.tickets().filter(t => t.status === 'en_progreso').length);
+  statsReabiertos = computed(() => this.ticketService.tickets().filter(t => t.status === 'reabierto').length);
+  statsTransferidos = computed(() => this.ticketService.tickets().filter(t => t.status === 'transferido').length);
+  statsResueltos = computed(() => this.ticketService.tickets().filter(t => t.status === 'resuelto').length);
 
   @Input() set viewMode(mode: 'create' | 'list' | 'detail') {
     this.innerViewMode.set(mode);
@@ -1466,6 +1927,7 @@ export class TicketsTabComponent implements OnInit {
 
   selectedTicket = signal<Ticket | null>(null);
   currentUserRole = computed(() => this.authService.currentUser()?.role || '');
+  currentUserId = computed(() => this.authService.currentUser()?.id || '');
 
   // Form controls
   ticketForm!: FormGroup;
@@ -1493,10 +1955,107 @@ export class TicketsTabComponent implements OnInit {
   // Attached files list
   attachments = signal<string[]>([]);
 
-  // Get active tickets list from service
-  ticketsList = computed(() => this.ticketService.tickets());
-  
-  
+  // Get active tickets list from service with custom sorting and filters
+  ticketsList = computed(() => {
+    const all = this.ticketService.tickets();
+    const role = this.currentUserRole();
+    const query = this.searchQuery().toLowerCase().trim();
+    const filter = this.selectedStatusFilter();
+    const currentUserId = this.authService.currentUser()?.id || '';
+
+    let filtered = all;
+
+    if (role === 'user') {
+      if (query) {
+        filtered = filtered.filter(t =>
+          t.title.toLowerCase().includes(query) ||
+          t.description.toLowerCase().includes(query) ||
+          t.institution.toLowerCase().includes(query)
+        );
+      }
+    } else {
+      // Agent status tab filters
+      if (filter === 'abierto') {
+        filtered = filtered.filter(t => t.status === 'abierto' && !t.assigned_to);
+      } else if (filter === 'en_progreso') {
+        filtered = filtered.filter(t => t.assigned_to === currentUserId && t.status === 'en_progreso');
+      } else if (filter === 'reabierto') {
+        filtered = filtered.filter(t => t.assigned_to === currentUserId && t.status === 'reabierto');
+      } else if (filter === 'transferido') {
+        filtered = filtered.filter(t => t.assigned_to === currentUserId && t.status === 'transferido');
+      } else if (filter === 'resuelto') {
+        filtered = filtered.filter(t => t.assigned_to === currentUserId && t.status === 'resuelto');
+      } else if (filter === 'cerrado') {
+        filtered = filtered.filter(t => t.assigned_to === currentUserId && t.status === 'cerrado');
+      }
+
+      // Search query filtering
+      if (query) {
+        filtered = filtered.filter(t =>
+          t.title.toLowerCase().includes(query) ||
+          t.description.toLowerCase().includes(query) ||
+          t.institution.toLowerCase().includes(query) ||
+          t.user_id.toLowerCase().includes(query)
+        );
+      }
+    }
+
+    // Sort: Nuevo at the top, then abierto -> reabierto -> en_progreso/transferido -> resuelto/cerrado
+    return [...filtered].sort((a, b) => {
+      const getStatusScore = (t: Ticket) => {
+        const isNew = role !== 'user' && !this.isTicketRead(t.id) && t.status !== 'resuelto' && t.status !== 'cerrado';
+        if (isNew) return 1;
+
+        switch (t.status) {
+          case 'abierto': return 2;
+          case 'reabierto': return 3;
+          case 'en_progreso':
+          case 'transferido': return 4;
+          case 'resuelto':
+          case 'cerrado': return 5;
+          default: return 6;
+        }
+      };
+
+      const scoreA = getStatusScore(a);
+      const scoreB = getStatusScore(b);
+
+      if (scoreA !== scoreB) {
+        return scoreA - scoreB;
+      }
+
+      const dateA = a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_at).getTime();
+      const dateB = b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_at).getTime();
+      return dateB - dateA;
+    });
+  });
+
+  initReadTickets(): void {
+    try {
+      const stored = localStorage.getItem('read_ticket_ids');
+      if (stored) {
+        this.readTicketIds.set(JSON.parse(stored));
+      }
+    } catch (e) {
+      console.error('Error reading read_ticket_ids:', e);
+    }
+  }
+
+  isTicketRead(ticketId: string): boolean {
+    return this.readTicketIds().includes(ticketId);
+  }
+
+  markTicketAsRead(ticketId: string): void {
+    if (!this.readTicketIds().includes(ticketId)) {
+      const updated = [...this.readTicketIds(), ticketId];
+      this.readTicketIds.set(updated);
+      try {
+        localStorage.setItem('read_ticket_ids', JSON.stringify(updated));
+      } catch (e) {
+        console.error('Error saving read_ticket_ids:', e);
+      }
+    }
+  }
 
   // Inline editing signals
   isEditing = signal(false);
@@ -1514,6 +2073,43 @@ export class TicketsTabComponent implements OnInit {
 
   constructor() {
     this.initForm();
+    this.initReadTickets();
+
+    // Periodic sync interval (5 seconds)
+    const intervalId = setInterval(() => {
+      const user = this.authService.currentUser();
+      if (user) {
+        this.ticketService.loadTicketsForUser(user.username);
+
+        // Also if in detail view, sync details
+        const sel = this.selectedTicket();
+        if (sel && this.innerViewMode() === 'detail') {
+          this.ticketService.getTicketDetails(sel.id).subscribe({
+            next: (updatedTicket) => {
+              if (!this.isEditing()) {
+                const parsed = {
+                  ...updatedTicket,
+                  created_at: new Date(updatedTicket.created_at),
+                  updated_at: new Date(updatedTicket.updated_at),
+                  closed_at: updatedTicket.closed_at ? new Date(updatedTicket.closed_at) : undefined,
+                  resolved_at: updatedTicket.resolved_at ? new Date(updatedTicket.resolved_at) : undefined,
+                  reopened_at: updatedTicket.reopened_at ? new Date(updatedTicket.reopened_at) : undefined,
+                  messages: updatedTicket.messages ? updatedTicket.messages.map((m: any) => ({
+                    ...m,
+                    created_at: new Date(m.created_at)
+                  })) : []
+                };
+                this.selectedTicket.set(parsed);
+              }
+            }
+          });
+        }
+      }
+    }, 5000);
+
+    this.destroyRef.onDestroy(() => {
+      clearInterval(intervalId);
+    });
 
     // Seed initial user email if logged in
     effect(() => {
@@ -1525,10 +2121,10 @@ export class TicketsTabComponent implements OnInit {
       }
     });
 
-    // Fetch agents list if the logged in user is not standard
+    // Fetch agents list for all users to resolve agent names
     effect(() => {
       const role = this.currentUserRole();
-      if (role && role !== 'user' && this.agentsList().length === 0) {
+      if (role && this.agentsList().length === 0) {
         this.ticketService.getAgents().subscribe({
           next: (agents) => this.agentsList.set(agents),
           error: (err) => console.error('Error loading agents:', err)
@@ -1555,6 +2151,7 @@ export class TicketsTabComponent implements OnInit {
 
   private initForm(): void {
     this.ticketForm = this.fb.group({
+      title: ['', Validators.required],
       email: ['', [Validators.required, Validators.email]],
       institution: ['', Validators.required],
       description: ['', Validators.required]
@@ -1649,6 +2246,7 @@ export class TicketsTabComponent implements OnInit {
       formVals.email,
       formVals.institution,
       this.selectedPriority(),
+      formVals.title,
       formVals.description,
       this.selectedTags(),
       this.attachments()
@@ -1670,6 +2268,7 @@ export class TicketsTabComponent implements OnInit {
 
   // Ticket Operations logic
   onSelectTicket(t: Ticket): void {
+    this.markTicketAsRead(t.id);
     this.ticketService.getTicketDetails(t.id).subscribe({
       next: (fullTicket) => {
         this.selectedTicket.set(fullTicket);
@@ -1741,10 +2340,23 @@ export class TicketsTabComponent implements OnInit {
     this.ticketService.addComment(t.id, txt).subscribe({
       next: () => {
         this.newCommentText = '';
-        const updatedTicket = this.ticketsList().find(x => x.id === t.id);
-        if (updatedTicket) {
-          this.selectedTicket.set(updatedTicket);
-        }
+        this.ticketService.getTicketDetails(t.id).subscribe({
+          next: (updatedTicket) => {
+            const parsed = {
+              ...updatedTicket,
+              created_at: new Date(updatedTicket.created_at),
+              updated_at: new Date(updatedTicket.updated_at),
+              closed_at: updatedTicket.closed_at ? new Date(updatedTicket.closed_at) : undefined,
+              resolved_at: updatedTicket.resolved_at ? new Date(updatedTicket.resolved_at) : undefined,
+              reopened_at: updatedTicket.reopened_at ? new Date(updatedTicket.reopened_at) : undefined,
+              messages: updatedTicket.messages ? updatedTicket.messages.map((m: any) => ({
+                ...m,
+                created_at: new Date(m.created_at)
+              })) : []
+            };
+            this.selectedTicket.set(parsed);
+          }
+        });
       },
       error: (err) => {
         console.error('Error adding comment:', err);
@@ -1755,23 +2367,28 @@ export class TicketsTabComponent implements OnInit {
   getTicketUserInitials(userId: string): string {
     if (!userId) return 'U';
     const name = userId.split('@')[0];
-    return name.substring(0, 2).toUpperCase();
+    return name.substring(0, 1).toUpperCase();
+  }
+
+  formatDisplayName(name: string): string {
+    if (!name) return '';
+    const raw = name.split('@')[0];
+    const words = raw.replace(/[._-]/g, ' ').split(/\s+/);
+    return words
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ');
   }
 
   getTicketUserFirstName(userId: string): string {
     if (!userId) return 'Usuario';
-    return userId.split('@')[0];
+    return this.formatDisplayName(userId);
   }
 
   getCommentSender(comment: TicketMessage): string {
-    const name = comment.sender_id.split('@')[0];
-    if (comment.role === 'user') {
-      return `${name} (Usuario)`;
-    } else if (comment.role === 'agent') {
-      return `${name} (Soporte Técnico)`;
-    } else {
-      return 'Asistente Virtual (Bot)';
+    if (comment.role === 'bot') {
+      return 'Asistente Virtual';
     }
+    return this.formatDisplayName(comment.sender_id);
   }
 
   getUserInitials(): string {
@@ -1868,6 +2485,9 @@ export class TicketsTabComponent implements OnInit {
           ...updatedTicket,
           created_at: new Date(updatedTicket.created_at),
           updated_at: new Date(updatedTicket.updated_at),
+          closed_at: updatedTicket.closed_at ? new Date(updatedTicket.closed_at) : undefined,
+          resolved_at: updatedTicket.resolved_at ? new Date(updatedTicket.resolved_at) : undefined,
+          reopened_at: updatedTicket.reopened_at ? new Date(updatedTicket.reopened_at) : undefined,
           messages: updatedTicket.messages ? updatedTicket.messages.map((m: any) => ({
             ...m,
             created_at: new Date(m.created_at)
@@ -1879,6 +2499,23 @@ export class TicketsTabComponent implements OnInit {
         console.error('Error changing ticket status:', err);
       }
     });
+  }
+
+  getAgentName(agentId: string): string {
+    const agent = this.agentsList().find(a => a.id === agentId);
+    if (agent) {
+      return this.formatDisplayName(`${agent.first_name} ${agent.last_name}`);
+    }
+    return this.formatDisplayName(agentId);
+  }
+
+  setStatusFilter(filter: 'todos' | 'abierto' | 'en_progreso' | 'reabierto' | 'transferido' | 'resuelto' | 'cerrado'): void {
+    this.selectedStatusFilter.set(filter);
+  }
+
+  onSearchInput(event: Event): void {
+    const val = (event.target as HTMLInputElement).value;
+    this.searchQuery.set(val);
   }
 }
 

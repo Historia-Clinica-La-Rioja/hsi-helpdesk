@@ -26,6 +26,9 @@ export interface Ticket {
   messages?: TicketMessage[];
   editCount?: number;
   assigned_to?: string;
+  closed_at?: Date;
+  resolved_at?: Date;
+  reopened_at?: Date;
 }
 
 @Injectable({
@@ -63,6 +66,9 @@ export class TicketService {
           ...t,
           created_at: new Date(t.created_at),
           updated_at: new Date(t.updated_at),
+          closed_at: t.closed_at ? new Date(t.closed_at) : undefined,
+          resolved_at: t.resolved_at ? new Date(t.resolved_at) : undefined,
+          reopened_at: t.reopened_at ? new Date(t.reopened_at) : undefined,
           messages: t.messages ? t.messages.map((m: any) => ({
             ...m,
             created_at: new Date(m.created_at)
@@ -93,6 +99,9 @@ export class TicketService {
           ...t,
           created_at: new Date(t.created_at),
           updated_at: new Date(t.updated_at),
+          closed_at: t.closed_at ? new Date(t.closed_at) : undefined,
+          resolved_at: t.resolved_at ? new Date(t.resolved_at) : undefined,
+          reopened_at: t.reopened_at ? new Date(t.reopened_at) : undefined,
           messages: t.messages ? t.messages.map((m: any) => ({
             ...m,
             created_at: new Date(m.created_at)
@@ -108,12 +117,12 @@ export class TicketService {
     email: string,
     institution: string,
     priority: 'Baja' | 'Media' | 'Alta',
+    title: string,
     description: string,
     tags: string[],
     attachments: string[]
   ): Observable<any> {
     const token = this.auth.token();
-    const title = description.length > 60 ? description.substring(0, 57) + '...' : description;
 
     return this.http.post<any>(`${this.apiUrl}/tickets`, {
       title,
@@ -227,7 +236,10 @@ export class TicketService {
             return {
               ...t,
               status: res.status,
-              updated_at: new Date(res.updated_at)
+              updated_at: new Date(res.updated_at),
+              closed_at: res.closed_at ? new Date(res.closed_at) : undefined,
+              resolved_at: res.resolved_at ? new Date(res.resolved_at) : undefined,
+              reopened_at: res.reopened_at ? new Date(res.reopened_at) : undefined
             };
           }
           return t;
@@ -253,7 +265,10 @@ export class TicketService {
               ...t,
               status: res.status,
               assigned_to: res.assigned_to || agentId,
-              updated_at: new Date(res.updated_at)
+              updated_at: new Date(res.updated_at),
+              closed_at: res.closed_at ? new Date(res.closed_at) : undefined,
+              resolved_at: res.resolved_at ? new Date(res.resolved_at) : undefined,
+              reopened_at: res.reopened_at ? new Date(res.reopened_at) : undefined
             };
           }
           return t;

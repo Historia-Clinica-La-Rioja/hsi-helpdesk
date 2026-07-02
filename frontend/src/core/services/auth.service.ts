@@ -19,12 +19,34 @@ export class AuthService {
     this.restoreSession();
   }
 
+  private decodeToken(token: string): any {
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) return null;
+      const decoded = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'));
+      return JSON.parse(decoded);
+    } catch (e) {
+      return null;
+    }
+  }
+
   private restoreSession(): void {
     const savedToken = localStorage.getItem('hsi_token');
     const savedUser = localStorage.getItem('hsi_user');
     if (savedToken && savedUser) {
       this.token.set(savedToken);
-      this.currentUser.set(JSON.parse(savedUser));
+      try {
+        const userObj = JSON.parse(savedUser);
+        if (!userObj.id) {
+          const decoded = this.decodeToken(savedToken);
+          if (decoded && decoded.user_id) {
+            userObj.id = decoded.user_id;
+          }
+        }
+        this.currentUser.set(userObj);
+      } catch (e) {
+        this.currentUser.set(null);
+      }
     }
   }
 
@@ -40,7 +62,10 @@ export class AuthService {
       tap(res => {
         if (res && res.status === 'success' && res.data && res.data.token) {
           const userToken = res.data.token;
+          const decoded = this.decodeToken(userToken);
+          const userId = decoded ? decoded.user_id : '';
           const userProfile = {
+            id: userId,
             username: trimmedUser,
             dni: trimmedDni,
             firstName: trimmedUser.split('@')[0],
@@ -67,7 +92,10 @@ export class AuthService {
       tap(res => {
         if (res && res.status === 'success' && res.data && res.data.token) {
           const userToken = res.data.token;
+          const decoded = this.decodeToken(userToken);
+          const userId = decoded ? decoded.user_id : '';
           const userProfile = {
+            id: userId,
             username: trimmedUser,
             firstName: trimmedUser.split('@')[0],
             role: 'agent'
