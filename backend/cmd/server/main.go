@@ -29,21 +29,23 @@ func main() {
 	authService := services.NewAuthService(userRepo, cfg.HsiApiUrl)
 	authHandler := handlers.NewAuthHandler(authService)
 
-	// 👇 NUEVO: Inicialización de Instituciones
-	// (Asegurate de haber creado estos archivos antes: repository y handler)
+	// Inicialización de Instituciones
 	institutionRepo := repositories.NewInstitutionRepository(db)
 	institutionHandler := handlers.NewInstitutionHandler(institutionRepo)
 
 	// Inicialización de Prioridades
 	priorityRepo := repositories.NewPriorityRepository(db)
 	priorityHandler := handlers.NewPriorityHandler(priorityRepo)
+	// 👇 NUEVO: Inicialización de FAQs (Faltaba esto para que no dé error)
+	faqRepo := repositories.NewFaqRepository(db)
+	faqHandler := handlers.NewFaqHandler(faqRepo)
 
 	router := gin.Default()
 
 	// Register CORS middleware
 	router.Use(middleware.CORS())
 
-	// Ruta de prueba
+	// Ruta de prueba (Totalmente pública)
 	router.GET("/api/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "success",
@@ -87,6 +89,32 @@ func main() {
 			auth.POST("/login/agent", authHandler.LoginAgent)
 			auth.POST("/login/sso", authHandler.LoginSSO)
 			auth.POST("/logout", authHandler.Logout)
+		}
+
+		// 👇 SEGURIDAD: Grupo de rutas protegidas
+		// Todo lo que esté adentro de este bloque requiere un token JWT válido
+		protected := api.Group("/")
+		protected.Use(middleware.AuthMiddleware())
+		{
+			// Protegemos estas rutas para evitar fuga de información (data scraping)
+			protected.GET("/institutions", institutionHandler.GetInstitutions)
+			protected.GET("/faqs", faqHandler.GetFaqs)
+
+			tickets := protected.Group("/tickets")
+			{
+				tickets.POST("", ticketHandler.CreateTicket)
+				tickets.GET("", ticketHandler.GetTickets)
+				tickets.GET("/:id", ticketHandler.GetTicket)
+				tickets.PUT("/:id", ticketHandler.UpdateTicket)
+				tickets.PUT("/:id/status", ticketHandler.UpdateTicketStatus)
+				tickets.PUT("/:id/assign", ticketHandler.AssignTicket)
+				tickets.POST("/:id/messages", ticketHandler.AddMessage)
+			}
+
+			agents := protected.Group("/agents")
+			{
+				agents.GET("", ticketHandler.GetAgents)
+			}
 		}
 	}
 

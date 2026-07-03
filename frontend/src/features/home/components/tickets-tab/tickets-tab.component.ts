@@ -7,8 +7,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { TicketService, Ticket, TicketMessage } from '../../../../core/services/ticket.service';
 import { AuthService } from '../../../../core/services/auth.service';
-import { HttpClient } from '@angular/common/http';
-import { HttpHeaders } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 
 export interface Institution {
   _id: string;
@@ -2139,7 +2138,13 @@ export class TicketsTabComponent implements OnInit {
   }
 
   loadInstitutions() {
-    this.http.get<Institution[]>('http://localhost:8083/api/institutions').subscribe({
+    // Usamos la clave exacta que vimos en el navegador
+    const token = localStorage.getItem('hsi_token'); 
+    
+    // Armamos el encabezado con el token
+    const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
+
+    this.http.get<Institution[]>('http://localhost:8083/api/institutions', { headers }).subscribe({
       next: (data) => {
         this.institutions.set(data);
       },
