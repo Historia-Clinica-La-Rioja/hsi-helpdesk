@@ -34,6 +34,10 @@ func main() {
 	institutionRepo := repositories.NewInstitutionRepository(db)
 	institutionHandler := handlers.NewInstitutionHandler(institutionRepo)
 
+	// Inicialización de Prioridades
+	priorityRepo := repositories.NewPriorityRepository(db)
+	priorityHandler := handlers.NewPriorityHandler(priorityRepo)
+
 	router := gin.Default()
 
 	// Register CORS middleware
@@ -63,6 +67,12 @@ func main() {
 			tickets.PUT("/:id/status", ticketHandler.UpdateTicketStatus)
 			tickets.PUT("/:id/assign", ticketHandler.AssignTicket)
 			tickets.POST("/:id/messages", ticketHandler.AddMessage)
+		}
+
+		priorities := api.Group("/priorities")
+		priorities.Use(middleware.AuthMiddleware())
+		{
+			priorities.GET("", priorityHandler.GetPriorities)
 		}
 
 		agents := api.Group("/agents")
