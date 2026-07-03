@@ -1,4 +1,4 @@
-import { Component, Output, EventEmitter, signal, ElementRef, ViewChild, AfterViewChecked, OnInit, inject, computed } from '@angular/core';
+import { Component, Output, EventEmitter, signal, ElementRef, ViewChild, AfterViewChecked, OnInit, inject, computed, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
@@ -40,7 +40,25 @@ export interface ChatMessage {
     @if (isOpen()) {
       <div class="chat-overlay" (click)="closeChat()">
         <div class="chat-window" (click)="$event.stopPropagation()">
-          
+
+          @if (confirmAction()) {
+            <div class="confirm-overlay">
+              <div class="confirm-dialog">
+                <span class="material-icons warning-icon">warning</span>
+                <h4>¿Estás seguro?</h4>
+                <p>
+                  {{ confirmAction() === 'reset' 
+                    ? 'Se reiniciará la conversación y perderás el historial actual.' 
+                    : 'Se cerrará el chat y se borrará el progreso de tu consulta.' }}
+                </p>
+                <div class="confirm-actions">
+                  <button class="cancel-btn" (click)="cancelConfirm()">Cancelar</button>
+                  <button class="accept-btn" (click)="executeConfirm()">Confirmar</button>
+                </div>
+              </div>
+            </div>
+          }
+
           <div class="chat-header">
             <div class="header-left">
               <div class="header-bot-icon">
@@ -56,16 +74,17 @@ export interface ChatMessage {
             </div>
             
             <div class="header-actions">
-              <button class="refresh-btn" (click)="resetChat()" title="Reiniciar chat">
+              <button class="refresh-btn" (click)="promptAction('reset')" title="Reiniciar chat">
                 <span class="material-icons">refresh</span>
               </button>
-              <button class="close-btn" (click)="closeChat()">
+              <button class="minimize-btn" (click)="minimizeChat()" title="Minimizar chat">
+                <span class="material-icons">remove</span>
+              </button>
+              <button class="close-btn" (click)="promptAction('close')" title="Cerrar y borrar chat">
                 <span class="material-icons">close</span>
               </button>
             </div>
-          </div>
-
-          <div class="chat-history" #scrollContainer>
+          </div> <div class="chat-history" #scrollContainer>
             @for (msg of messages(); track msg.id) {
               <div class="message-row" [ngClass]="msg.sender">
                 
@@ -100,7 +119,10 @@ export interface ChatMessage {
                     </button>
                   }
                 </div>
-              </div> } @if (showFAQChips() && faqs().length > 0) {
+              </div> 
+            } 
+            
+            @if (showFAQChips() && faqs().length > 0) {
               <div class="faq-chips-row">
                 
                 @if (!selectedCategory()) {
@@ -161,7 +183,6 @@ export interface ChatMessage {
       </div> 
     }
   `,
-
   styles: [`
     /* FAB Button style */
     .bot-fab-container {
@@ -261,6 +282,7 @@ export interface ChatMessage {
     }
 
     .chat-window {
+      position: relative; /* 👇 NUEVO: Mantiene el pop-up atrapado acá adentro */
       width: 380px;
       height: 560px;
       background-color: var(--color-bg-primary);
@@ -368,7 +390,7 @@ export interface ChatMessage {
       gap: 12px;
     }
 
-    .refresh-btn, .close-btn {
+    .refresh-btn, .minimize-btn, .close-btn {
       background: transparent;
       border: none;
       color: white;
@@ -381,7 +403,7 @@ export interface ChatMessage {
       outline: none;
     }
 
-    .refresh-btn:hover, .close-btn:hover {
+    .refresh-btn:hover, .minimize-btn:hover, .close-btn:hover {
       opacity: 1;
     }
 
@@ -584,6 +606,95 @@ export interface ChatMessage {
     .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
     .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
 
+    /* Confirm Overlay */
+    .confirm-overlay {
+      position: absolute; /* Se posiciona relativo a .chat-window */
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(51, 49, 67, 0.75);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius-chat);
+      animation: fadeIn 0.2s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .confirm-dialog {
+      background-color: var(--color-bg-primary, #fff);
+      padding: 24px;
+      border-radius: 12px;
+      width: 80%;
+      text-align: center;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .warning-icon {
+      font-size: 32px;
+      color: #E29E21; /* Color de advertencia */
+      margin: 0 auto;
+    }
+
+    .confirm-dialog h4 {
+      margin: 0;
+      font-family: var(--font-heading);
+      color: var(--color-text-primary);
+    }
+
+    .confirm-dialog p {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--color-text-primary);
+      opacity: 0.8;
+    }
+
+    .confirm-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      justify-content: center;
+    }
+
+    .confirm-actions button {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: var(--font-body);
+      font-size: 13px;
+      transition: background-color 0.2s;
+    }
+
+    .confirm-actions .cancel-btn {
+      background-color: #EBF4FD;
+      color: var(--bot-blue);
+    }
+
+    .confirm-actions .cancel-btn:hover {
+      background-color: #D6E9FC;
+    }
+
+    .confirm-actions .accept-btn {
+      background-color: var(--bot-blue);
+      color: white;
+    }
+
+    .confirm-actions .accept-btn:hover {
+      background-color: #2F7CE5;
+    }
+
     @keyframes typingBounce {
       0%, 80%, 100% { transform: scale(0); }
       40% { transform: scale(1); }
@@ -597,9 +708,10 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
 
   private http = inject(HttpClient);
 
-  isOpen = signal(false);
+  isOpen = signal(sessionStorage.getItem('hsi_chat_open') === 'true');
   isTyping = signal(false);
   showFAQChips = signal(true);
+  confirmAction = signal<'reset' | 'close' | null>(null);
   userInput = '';
 
   faqs = signal<Faq[]>([]);
@@ -608,7 +720,7 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
   selectedCategory = signal<string | null>(null);
 
   failedAttempts = signal(0);
-  
+
   // 👇 NUEVO: Extraemos solo las categorías (labels) únicas para el primer menú
   uniqueCategories = computed(() => {
     const allFaqs = this.faqs();
@@ -623,28 +735,54 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
     return this.faqs().filter(f => f.label === category);
   });
 
-  messages = signal<ChatMessage[]>([
-    {
-      id: 'msg_1',
-      sender: 'bot',
-      content: '¡Hola! Soy el asistente virtual de HSI. Podés escribir tu consulta en la barra de texto o elegir una de las opciones rápidas:',
-      timestamp: new Date()
+  messages = signal<ChatMessage[]>(this.loadSavedMessages());
+
+  // 👇 NUEVA FUNCIÓN: Intenta leer la memoria, o devuelve el mensaje de bienvenida
+  private loadSavedMessages(): ChatMessage[] {
+    const saved = sessionStorage.getItem('hsi_chat_messages');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // JSON convierte las fechas a texto, las volvemos a hacer formato Date
+        parsed.forEach((m: any) => m.timestamp = new Date(m.timestamp));
+        return parsed;
+      } catch (e) {
+        console.error("Error leyendo historial", e);
+      }
     }
-  ]);
+    // Si no hay nada guardado, devolvemos el saludo original
+    return [
+      {
+        id: 'msg_1',
+        sender: 'bot',
+        content: '¡Hola! Soy el asistente virtual de HSI. Podés escribir tu consulta en la barra de texto o elegir una de las opciones rápidas:',
+        timestamp: new Date()
+      }
+    ];
+  }
+
+  constructor() {
+    effect(() => {
+      sessionStorage.setItem('hsi_chat_messages', JSON.stringify(this.messages()));
+    });
+
+    // guardamos el estado de la ventana (para que no se cierre si recargan)
+    effect(() => {
+      sessionStorage.setItem('hsi_chat_open', String(this.isOpen()));
+    });
+  }
 
   ngOnInit(): void {
     // Cargar FAQs al iniciar el componente
     this.loadFaqs();
   }
 
-  // 👇 AGREGADO: Buscador por palabras clave que le faltaba a tu clase
   private findBestFaqMatch(input: string): Faq | undefined {
-    // Normalizamos el texto (pasamos a minúsculas y quitamos acentos)
     const normalizedInput = input.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    
+
     // Palabras comunes que ignoramos
     const stopWords = ['el', 'la', 'los', 'las', 'un', 'una', 'como', 'mi', 'de', 'para', 'que', 'en', 'a', 'y', 'o', 'por', 'con', 'tu', 'su', 'quiero', 'necesito'];
-    
+
     const keywords = normalizedInput
       .split(/\W+/)
       .filter(word => word.length > 2 && !stopWords.includes(word));
@@ -659,7 +797,7 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
         .toLowerCase()
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "");
-      
+
       let score = 0;
       for (const kw of keywords) {
         if (targetText.includes(kw)) {
@@ -708,6 +846,29 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
     this.resetChat();
   }
 
+  // Llama al pop-up
+  promptAction(action: 'reset' | 'close'): void {
+    this.confirmAction.set(action);
+  }
+
+  cancelConfirm(): void {
+    this.confirmAction.set(null);
+  }
+
+  executeConfirm(): void {
+    const action = this.confirmAction();
+    if (action === 'reset') {
+      this.resetChat();
+    } else if (action === 'close') {
+      this.closeChat();
+    }
+    this.confirmAction.set(null);
+  }
+
+  minimizeChat(): void {
+    this.isOpen.set(false);
+  }
+
   resetChat(): void {
     this.showFAQChips.set(true);
     this.selectedCategory.set(null);
@@ -730,10 +891,10 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
     this.selectedCategory.set(null);
   }
 
- onFAQClick(faq: Faq): void {
+  onFAQClick(faq: Faq): void {
     this.showFAQChips.set(false);
     this.selectedCategory.set(null); // Reseteamos la categoría internamente
-    
+
     this.addMessage('user', faq.questions);
     this.isTyping.set(true);
 
@@ -747,10 +908,10 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
           sender: 'bot',
           content: faq.answers,
           timestamp: new Date(),
-          isCTA: faq.label.toLowerCase().includes('ticket') 
+          isCTA: faq.label.toLowerCase().includes('ticket')
         }
       ]);
-      
+
       // 👇 NUEVO: Volvemos a mostrar el menú de opciones para que haga otra consulta
       this.showFAQChips.set(true);
       // Forzamos el scroll hacia abajo para que el usuario vea que reaparecieron las opciones
@@ -763,7 +924,7 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
     event.preventDefault();
     this.onSubmit();
   }
-  
+
 
   onSubmit(event?: Event): void {
     if (event) event.preventDefault();
@@ -772,8 +933,8 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
 
     this.userInput = '';
     this.showFAQChips.set(false);
-    this.selectedCategory.set(null); 
-    
+    this.selectedCategory.set(null);
+
     this.addMessage('user', input);
     this.isTyping.set(true);
 
@@ -785,9 +946,9 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
       if (matchedFaq) {
         // ¡Entendió la pregunta! Reseteamos los fallos a 0
         this.failedAttempts.set(0);
-        
+
         this.addMessage('bot', matchedFaq.answers);
-        
+
         if (matchedFaq.label.toLowerCase().includes('ticket') || matchedFaq.questions.toLowerCase().includes('ticket')) {
           this.messages.set([
             ...this.messages(),
@@ -800,7 +961,7 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
             }
           ]);
         }
-        
+
         this.showFAQChips.set(true);
         setTimeout(() => this.scrollToBottom(), 50);
 
@@ -810,23 +971,26 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
         this.failedAttempts.set(currentFails);
 
         if (currentFails >= 3) {
-          // Ya falló 3 veces, le damos la opción de humano
+          // Ya falló 3 veces, le sugerimos crear un ticket oficial
           this.messages.set([
             ...this.messages(),
             {
               id: 'msg_' + Math.random(),
               sender: 'bot',
-              content: 'Parece que no estoy logrando encontrar la respuesta exacta. ¿Preferís que te conecte con un agente humano del equipo de soporte?',
+              content: 'Parece que no logro encontrar la respuesta exacta a tu consulta. Te sugiero cargar un ticket para que el equipo de soporte técnico pueda revisarlo en detalle.',
               timestamp: new Date(),
-              isEscalationPrompt: true
+              isCTA: true
             }
           ]);
+
+          // Ocultamos las opciones rápidas ya que lo derivamos a tickets
+          this.showFAQChips.set(false);
           setTimeout(() => this.scrollToBottom(), 50);
-          
+
         } else {
           // Es el intento 1 o 2, pedimos que reformule
           this.addMessage('bot', 'No logré entender tu consulta. ¿Podrías usar otras palabras o ser un poco más específico?');
-          
+
           this.showFAQChips.set(true);
           setTimeout(() => this.scrollToBottom(), 50);
         }
@@ -835,14 +999,14 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
   }
 
   triggerEscalation(): void {
-  this.failedAttempts.set(0);
-  this.addMessage('user', 'Quiero hablar con un agente humano');
-  this.isTyping.set(true);
-  setTimeout(() => {
-    this.isTyping.set(false);
-    this.simulateEscalation();
-  }, 800);
-}
+    this.failedAttempts.set(0);
+    this.addMessage('user', 'Quiero hablar con un agente humano');
+    this.isTyping.set(true);
+    setTimeout(() => {
+      this.isTyping.set(false);
+      this.simulateEscalation();
+    }, 800);
+  }
 
   private addMessage(sender: 'bot' | 'user' | 'agent', content: string, extra?: Partial<ChatMessage>): void {
     const newMsg: ChatMessage = {
