@@ -17,7 +17,7 @@ export interface Ticket {
   description: string;
   user_id: string;
   institution: string;
-  priority: 'Baja' | 'Media' | 'Alta';
+  priority: string;
   status: 'abierto' | 'en_progreso' | 'resuelto' | 'cerrado' | 'transferido' | 'reabierto';
   tags: string[];
   attachments: string[];
@@ -116,7 +116,7 @@ export class TicketService {
   createTicket(
     email: string,
     institution: string,
-    priority: 'Baja' | 'Media' | 'Alta',
+    priority: string,
     title: string,
     description: string,
     tags: string[],
@@ -159,7 +159,7 @@ export class TicketService {
     );
   }
 
-  updateTicket(id: string, description: string, priority: 'Baja' | 'Media' | 'Alta', isUserEdit: boolean = false): Observable<any> {
+  updateTicket(id: string, description: string, priority: string, isUserEdit: boolean = false): Observable<any> {
     const token = this.auth.token();
 
     return this.http.put<any>(`${this.apiUrl}/tickets/${id}`, {
