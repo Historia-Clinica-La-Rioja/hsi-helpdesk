@@ -22,6 +22,9 @@ type TicketRepository interface {
 	FindUserByID(id primitive.ObjectID) (*models.User, error)
 	GetAgents() ([]models.User, error)
 
+	FindPriorityByName(name string) (*models.Priority, error)
+	FindPriorityByID(id primitive.ObjectID) (*models.Priority, error)
+
 	InsertMessage(msg *models.DBMessage) error
 	GetMessagesByTicketID(ticketID primitive.ObjectID) ([]models.DBMessage, error)
 	InsertAuditLog(log *models.AuditLog) error
@@ -34,6 +37,7 @@ type ticketRepository struct {
 	auditsCol       *mongo.Collection
 	institutionsCol *mongo.Collection
 	usersCol        *mongo.Collection
+	prioritiesCol   *mongo.Collection
 }
 
 func NewTicketRepository(db *mongo.Database) TicketRepository {
@@ -44,6 +48,7 @@ func NewTicketRepository(db *mongo.Database) TicketRepository {
 		auditsCol:       db.Collection("Audits_Logs"),
 		institutionsCol: db.Collection("InstitutionHSI"),
 		usersCol:        db.Collection("UsersHSI"),
+		prioritiesCol:   db.Collection("Priorities"),
 	}
 }
 
@@ -220,4 +225,28 @@ func (r *ticketRepository) GetAgents() ([]models.User, error) {
 		return nil, err
 	}
 	return agents, nil
+}
+
+func (r *ticketRepository) FindPriorityByName(name string) (*models.Priority, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var priority models.Priority
+	err := r.prioritiesCol.FindOne(ctx, bson.M{"name": name}).Decode(&priority)
+	if err != nil {
+		return nil, err
+	}
+	return &priority, nil
+}
+
+func (r *ticketRepository) FindPriorityByID(id primitive.ObjectID) (*models.Priority, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var priority models.Priority
+	err := r.prioritiesCol.FindOne(ctx, bson.M{"_id": id}).Decode(&priority)
+	if err != nil {
+		return nil, err
+	}
+	return &priority, nil
 }

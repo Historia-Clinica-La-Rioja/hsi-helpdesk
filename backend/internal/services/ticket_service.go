@@ -82,9 +82,16 @@ func (s *ticketService) CreateTicket(createdBy primitive.ObjectID, req *models.A
 	}
 
 	// Resolve Priority ID
-	priorityID, ok := PriorityNameToID[req.Priority]
-	if !ok {
-		priorityID = PriorityNameToID["Media"] // Default
+	var priorityID primitive.ObjectID
+	dbPrio, err := s.ticketRepo.FindPriorityByName(req.Priority)
+	if err == nil {
+		priorityID = dbPrio.ID
+	} else {
+		var ok bool
+		priorityID, ok = PriorityNameToID[req.Priority]
+		if !ok {
+			priorityID = PriorityNameToID["Media"] // Default
+		}
 	}
 
 	// State ID defaults to "Abierto"
@@ -235,9 +242,16 @@ func (s *ticketService) UpdateTicket(userObjectID primitive.ObjectID, role strin
 	}
 
 	// Map requested priority
-	priorityID, ok := PriorityNameToID[req.Priority]
-	if !ok {
-		priorityID = dbT.PriorityID
+	var priorityID primitive.ObjectID
+	dbPrio, err := s.ticketRepo.FindPriorityByName(req.Priority)
+	if err == nil {
+		priorityID = dbPrio.ID
+	} else {
+		var ok bool
+		priorityID, ok = PriorityNameToID[req.Priority]
+		if !ok {
+			priorityID = dbT.PriorityID
+		}
 	}
 
 	// Update fields
@@ -570,9 +584,16 @@ func (s *ticketService) populateAPITicket(dbT *models.DBTicket) *models.APITicke
 	}
 
 	// Resolve priority
-	if prioName, ok := PriorityIDToName[dbT.PriorityID]; ok {
-		apiT.Priority = prioName
+	prioName := "Media"
+	dbPrio, err := s.ticketRepo.FindPriorityByID(dbT.PriorityID)
+	if err == nil {
+		prioName = dbPrio.Name
+	} else {
+		if name, ok := PriorityIDToName[dbT.PriorityID]; ok {
+			prioName = name
+		}
 	}
+	apiT.Priority = prioName
 
 	// Resolve state
 	if stateName, ok := StateIDToName[dbT.StateID]; ok {
