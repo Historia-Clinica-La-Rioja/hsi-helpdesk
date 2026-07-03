@@ -38,7 +38,7 @@ export interface ChatMessage {
     </div>
 
     @if (isOpen()) {
-      <div class="chat-overlay" (click)="closeChat()">
+      <div class="chat-overlay">
         <div class="chat-window" (click)="$event.stopPropagation()">
 
           @if (confirmAction()) {
@@ -169,12 +169,13 @@ export interface ChatMessage {
               rows="1"
               [(ngModel)]="userInput"
               name="userInput"
-              placeholder="Escribí tu consulta..."
+              placeholder="Escritura deshabilitada temporalmente. Por favor, usá los botones..."
               (keydown.enter)="onEnterKey($event)"
               #inputTextarea
+              disabled
             ></textarea>
             
-            <button type="submit" class="send-btn" [disabled]="!userInput.trim() || isTyping()">
+            <button type="submit" class="send-btn" [disabled]="true">
               <span class="material-icons">send</span>
             </button>
           </form>
@@ -737,7 +738,6 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
 
   messages = signal<ChatMessage[]>(this.loadSavedMessages());
 
-  // 👇 NUEVA FUNCIÓN: Intenta leer la memoria, o devuelve el mensaje de bienvenida
   private loadSavedMessages(): ChatMessage[] {
     const saved = sessionStorage.getItem('hsi_chat_messages');
     if (saved) {
@@ -755,7 +755,7 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
       {
         id: 'msg_1',
         sender: 'bot',
-        content: '¡Hola! Soy el asistente virtual de HSI. Podés escribir tu consulta en la barra de texto o elegir una de las opciones rápidas:',
+        content: '¡Hola! Soy el asistente virtual de HSI. Podés elegir una de las opciones rápidas para resolver tu duda:',
         timestamp: new Date()
       }
     ];
@@ -876,7 +876,7 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
       {
         id: 'msg_1',
         sender: 'bot',
-        content: '¡Hola! Soy el asistente virtual de HSI. Podés escribir tu consulta en la barra de texto o elegir una de las opciones rápidas:',
+        content: '¡Hola! Soy el asistente virtual de HSI. Podés elegir una de las opciones rápidas para resolver tu duda:',
         timestamp: new Date()
       }
     ]);
