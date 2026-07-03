@@ -100,6 +100,9 @@ func (r *ticketRepository) Update(ticket *models.DBTicket) error {
 		"updated_at":  ticket.UpdatedAt,
 		"edit_count":  ticket.EditCount,
 		"assigned_to": ticket.AssignedTo,
+		"closed_at":   ticket.ClosedAt,
+		"resolved_at": ticket.ResolvedAt,
+		"reopened_at": ticket.ReopenedAt,
 	}}
 
 	_, err := r.ticketsCol.UpdateOne(ctx, filter, update)
