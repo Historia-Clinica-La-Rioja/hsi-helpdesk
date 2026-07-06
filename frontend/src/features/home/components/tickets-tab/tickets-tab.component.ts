@@ -17,7 +17,7 @@ export interface Institution {
 }
 
 export interface Priority {
-  _id: string;
+  id: string;
   name: string;
 }
 
@@ -104,7 +104,7 @@ export interface Priority {
                 <div class="form-group">
                   <label>Prioridad *</label>
                   <div class="priority-chips-row">
-                    @for (prio of priorities(); track prio._id) {
+                    @for (prio of priorities(); track prio.id) {
                       <button 
                         type="button" 
                         class="priority-chip"
@@ -602,7 +602,7 @@ export interface Priority {
                   <div class="form-group">
                     <label>Prioridad</label>
                     <div class="priority-chips-row">
-                      @for (prio of priorities(); track prio._id) {
+                      @for (prio of priorities(); track prio.id) {
                         <button 
                           type="button" 
                           class="priority-chip"
@@ -2155,7 +2155,7 @@ export class TicketsTabComponent implements OnInit {
   }
 
   loadPriorities() {
-    const token = localStorage.getItem('hsi_token'); 
+    const token = localStorage.getItem('hsi_token');
     const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
 
     this.http.get<Priority[]>('http://localhost:8083/api/priorities', { headers }).subscribe({
