@@ -16,6 +16,11 @@ export interface Institution {
   email: string;
 }
 
+export interface Priority {
+  id: string;
+  name: string;
+}
+
 @Component({
   selector: 'app-tickets-tab',
   standalone: true,
@@ -99,30 +104,17 @@ export interface Institution {
                 <div class="form-group">
                   <label>Prioridad *</label>
                   <div class="priority-chips-row">
-                    <button 
-                      type="button" 
-                      class="priority-chip low" 
-                      [class.active]="selectedPriority() === 'Baja'"
-                      (click)="setPriority('Baja')"
-                    >
-                      🟢 Baja
-                    </button>
-                    <button 
-                      type="button" 
-                      class="priority-chip medium" 
-                      [class.active]="selectedPriority() === 'Media'"
-                      (click)="setPriority('Media')"
-                    >
-                      🟡 Media
-                    </button>
-                    <button 
-                      type="button" 
-                      class="priority-chip high" 
-                      [class.active]="selectedPriority() === 'Alta'"
-                      (click)="setPriority('Alta')"
-                    >
-                      🔴 Alta
-                    </button>
+                    @for (prio of priorities(); track prio.id) {
+                      <button 
+                        type="button" 
+                        class="priority-chip"
+                        [ngClass]="getPriorityChipClass(prio.name)"
+                        [class.active]="selectedPriority() === prio.name"
+                        (click)="setPriority(prio.name)"
+                      >
+                        {{ getPriorityEmoji(prio.name) }} {{ prio.name }}
+                      </button>
+                    }
                   </div>
                 </div>
               </div>
@@ -354,7 +346,7 @@ export interface Institution {
                         <span class="institution-name-card" style="font-weight: 500;">{{ ticket.institution }}</span>
                         <span class="separator-dot" style="color: var(--color-border); margin: 0 2px;">•</span>
                         <!-- Priority Badge -->
-                        <span class="card-priority-dot-indicator" [ngClass]="ticket.priority.toLowerCase()">
+                        <span class="card-priority-dot-indicator" [ngClass]="getPriorityClass(ticket.priority)">
                           <span class="priority-bullet">•</span>
                           <span>{{ ticket.priority }}</span>
                         </span>
@@ -486,7 +478,7 @@ export interface Institution {
                   </div>
                   <div class="info-block">
                     <span class="info-label">Prioridad</span>
-                    <span class="priority-badge" [ngClass]="ticket.priority.toLowerCase()">
+                    <span class="priority-badge" [ngClass]="getPriorityClass(ticket.priority)">
                       {{ ticket.priority }}
                     </span>
                   </div>
@@ -610,30 +602,17 @@ export interface Institution {
                   <div class="form-group">
                     <label>Prioridad</label>
                     <div class="priority-chips-row">
-                      <button 
-                        type="button" 
-                        class="priority-chip low" 
-                        [class.active]="editPriority === 'Baja'"
-                        (click)="editPriority = 'Baja'"
-                      >
-                        🟢 Baja
-                      </button>
-                      <button 
-                        type="button" 
-                        class="priority-chip medium" 
-                        [class.active]="editPriority === 'Media'"
-                        (click)="editPriority = 'Media'"
-                      >
-                        🟡 Media
-                      </button>
-                      <button 
-                        type="button" 
-                        class="priority-chip high" 
-                        [class.active]="editPriority === 'Alta'"
-                        (click)="editPriority = 'Alta'"
-                      >
-                        🔴 Alta
-                      </button>
+                      @for (prio of priorities(); track prio.id) {
+                        <button 
+                          type="button" 
+                          class="priority-chip"
+                          [ngClass]="getPriorityChipClass(prio.name)"
+                          [class.active]="editPriority === prio.name"
+                          (click)="editPriority = prio.name"
+                        >
+                          {{ getPriorityEmoji(prio.name) }} {{ prio.name }}
+                        </button>
+                      }
                     </div>
                   </div>
 
@@ -676,7 +655,7 @@ export interface Institution {
                       [placeholder]="currentUserRole() === 'user' ? 'Escribí un comentario o respuesta para el equipo de soporte...' : 'Escribí una respuesta o comentario para el usuario...'"
                       required
                     ></textarea>
-                    <button type="submit" class="comment-submit-btn" [disabled]="!newCommentText.trim()">
+                    <button type="submit" class="comment-submit-btn" [disabled]="!newCommentText.trim() || isSendingComment()">
                       Enviar Comentario
                     </button>
                   </form>
@@ -850,6 +829,12 @@ export interface Institution {
     }
 
     .priority-chip.high.active {
+      background-color: #FFF3E0;
+      border-color: #FB8C00;
+      color: #E65100;
+    }
+
+    .priority-chip.critica.active {
       background-color: #FDF2F2;
       border-color: var(--color-error);
       color: var(--color-error);
@@ -1148,11 +1133,21 @@ export interface Institution {
       line-height: 1;
     }
     .card-priority-dot-indicator.alta {
+      background-color: #FFF3E0;
+      color: #E65100;
+      border: 1px solid #FFE0B2;
+    }
+    .card-priority-dot-indicator.alta .priority-bullet {
+      color: #FB8C00;
+      font-size: 14px;
+      line-height: 1;
+    }
+    .card-priority-dot-indicator.critica {
       background-color: #FFEBEE;
       color: #C62828;
       border: 1px solid #FFCDD2;
     }
-    .card-priority-dot-indicator.alta .priority-bullet {
+    .card-priority-dot-indicator.critica .priority-bullet {
       color: #E53935;
       font-size: 14px;
       line-height: 1;
@@ -1363,7 +1358,8 @@ export interface Institution {
 
     .priority-badge.baja { background-color: #EDF8F6; color: #2E9E7A; }
     .priority-badge.media { background-color: #FFF8E6; color: #9A7A00; }
-    .priority-badge.alta { background-color: #FDF2F2; color: var(--color-error); }
+    .priority-badge.alta { background-color: #FFF3E0; color: #E65100; }
+    .priority-badge.critica { background-color: #FDF2F2; color: var(--color-error); }
 
     .detail-description-section h4, .detail-attachments-section h4 {
       font-family: var(--font-heading);
@@ -1946,7 +1942,8 @@ export class TicketsTabComponent implements OnInit {
   });
 
   // Priority chip signal
-  selectedPriority = signal<'Baja' | 'Media' | 'Alta'>('Media');
+  selectedPriority = signal<string>('Media');
+  priorities = signal<Priority[]>([]);
 
   // Tag chips configurations
   availableTags = ['Acceso', 'Turnos', 'Historia Clínica', 'Facturación', 'Otro'];
@@ -2060,10 +2057,11 @@ export class TicketsTabComponent implements OnInit {
   // Inline editing signals
   isEditing = signal(false);
   editDescription = '';
-  editPriority: 'Baja' | 'Media' | 'Alta' = 'Media';
+  editPriority = 'Media';
 
   // Comments signals
   newCommentText = '';
+  isSendingComment = signal(false);
   ticketComments = computed(() => {
     const t = this.selectedTicket();
     return t ? t.messages || [] : [];
@@ -2134,8 +2132,9 @@ export class TicketsTabComponent implements OnInit {
   }
 
   ngOnInit() {
-    // Al iniciar el componente, traemos las instituciones de la base de datos
+    // Al iniciar el componente, traemos las instituciones y prioridades de la base de datos
     this.loadInstitutions();
+    this.loadPriorities();
   }
 
   loadInstitutions() {
@@ -2153,6 +2152,50 @@ export class TicketsTabComponent implements OnInit {
         console.error('Error al cargar las instituciones desde la BD:', err);
       }
     });
+  }
+
+  loadPriorities() {
+    const token = localStorage.getItem('hsi_token');
+    const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
+
+    this.http.get<Priority[]>('http://localhost:8083/api/priorities', { headers }).subscribe({
+      next: (data) => {
+        this.priorities.set(data);
+      },
+      error: (err) => {
+        console.error('Error al cargar las prioridades desde la BD:', err);
+      }
+    });
+  }
+
+  getPriorityClass(name: string): string {
+    if (!name) return 'media';
+    const n = name.toLowerCase();
+    if (n.includes('baja')) return 'baja';
+    if (n.includes('media')) return 'media';
+    if (n.includes('alta')) return 'alta';
+    if (n.includes('crit') || n.includes('crít')) return 'critica';
+    return 'baja';
+  }
+
+  getPriorityChipClass(name: string): string {
+    if (!name) return 'medium';
+    const n = name.toLowerCase();
+    if (n.includes('baja')) return 'low';
+    if (n.includes('media')) return 'medium';
+    if (n.includes('alta')) return 'high';
+    if (n.includes('crit') || n.includes('crít')) return 'critica';
+    return 'low';
+  }
+
+  getPriorityEmoji(name: string): string {
+    if (!name) return '🟢';
+    const n = name.toLowerCase();
+    if (n.includes('baja')) return '🟢';
+    if (n.includes('media')) return '🟡';
+    if (n.includes('alta')) return '🟠';
+    if (n.includes('crit') || n.includes('crít')) return '🔴';
+    return '🟢';
   }
 
   private initForm(): void {
@@ -2187,7 +2230,7 @@ export class TicketsTabComponent implements OnInit {
     this.institutionQuery.set(val);
   }
 
-  setPriority(p: 'Baja' | 'Media' | 'Alta'): void {
+  setPriority(p: string): void {
     this.selectedPriority.set(p);
   }
 
@@ -2233,8 +2276,19 @@ export class TicketsTabComponent implements OnInit {
     this.attachments.set([...this.attachments(), ...names]);
   }
 
-  onCancel(): void {
+  private resetForm(): void {
     this.ticketForm.reset();
+    const user = this.authService.currentUser();
+    if (user) {
+      this.ticketForm.patchValue({
+        email: user.username.includes('@') ? user.username : `${user.username}@salud.larioja.gob.ar`
+      });
+    }
+    this.institutionQuery.set('');
+  }
+
+  onCancel(): void {
+    this.resetForm();
     this.selectedTags.set([]);
     this.attachments.set([]);
     this.selectedPriority.set('Media');
@@ -2259,7 +2313,7 @@ export class TicketsTabComponent implements OnInit {
     ).subscribe({
       next: (res) => {
         this.isSubmitting.set(false);
-        this.ticketForm.reset();
+        this.resetForm();
         this.selectedTags.set([]);
         this.attachments.set([]);
         this.selectedPriority.set('Media');
@@ -2274,7 +2328,9 @@ export class TicketsTabComponent implements OnInit {
 
   // Ticket Operations logic
   onSelectTicket(t: Ticket): void {
-    this.markTicketAsRead(t.id);
+    if (this.currentUserRole() !== 'user') {
+      this.markTicketAsRead(t.id);
+    }
     this.ticketService.getTicketDetails(t.id).subscribe({
       next: (fullTicket) => {
         this.selectedTicket.set(fullTicket);
@@ -2339,9 +2395,13 @@ export class TicketsTabComponent implements OnInit {
 
   onSubmitComment(event: Event): void {
     event.preventDefault();
+    if (this.isSendingComment()) return;
+
     const t = this.selectedTicket();
     const txt = this.newCommentText.trim();
     if (!t || !txt) return;
+
+    this.isSendingComment.set(true);
 
     this.ticketService.addComment(t.id, txt).subscribe({
       next: () => {
@@ -2361,11 +2421,16 @@ export class TicketsTabComponent implements OnInit {
               })) : []
             };
             this.selectedTicket.set(parsed);
+            this.isSendingComment.set(false);
+          },
+          error: () => {
+            this.isSendingComment.set(false);
           }
         });
       },
       error: (err) => {
         console.error('Error adding comment:', err);
+        this.isSendingComment.set(false);
       }
     });
   }

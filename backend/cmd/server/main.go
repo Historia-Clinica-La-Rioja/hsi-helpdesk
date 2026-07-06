@@ -33,6 +33,9 @@ func main() {
 	institutionRepo := repositories.NewInstitutionRepository(db)
 	institutionHandler := handlers.NewInstitutionHandler(institutionRepo)
 
+	// Inicialización de Prioridades
+	priorityRepo := repositories.NewPriorityRepository(db)
+	priorityHandler := handlers.NewPriorityHandler(priorityRepo)
 	// 👇 NUEVO: Inicialización de FAQs (Faltaba esto para que no dé error)
 	faqRepo := repositories.NewFaqRepository(db)
 	faqHandler := handlers.NewFaqHandler(faqRepo)
@@ -52,7 +55,34 @@ func main() {
 
 	api := router.Group("/api")
 	{
-		// Rutas de Autenticación (Públicas para poder iniciar sesión)
+		// 👇 NUEVO: La ruta de instituciones va directo bajo "/api"
+		// (A menos que quieras protegerla con AuthMiddleware, en ese caso iría adentro de un grupo protegido)
+		api.GET("/institutions", institutionHandler.GetInstitutions)
+
+		tickets := api.Group("/tickets")
+		tickets.Use(middleware.AuthMiddleware())
+		{
+			tickets.POST("", ticketHandler.CreateTicket)
+			tickets.GET("", ticketHandler.GetTickets)
+			tickets.GET("/:id", ticketHandler.GetTicket)
+			tickets.PUT("/:id", ticketHandler.UpdateTicket)
+			tickets.PUT("/:id/status", ticketHandler.UpdateTicketStatus)
+			tickets.PUT("/:id/assign", ticketHandler.AssignTicket)
+			tickets.POST("/:id/messages", ticketHandler.AddMessage)
+		}
+
+		priorities := api.Group("/priorities")
+		priorities.Use(middleware.AuthMiddleware())
+		{
+			priorities.GET("", priorityHandler.GetPriorities)
+		}
+
+		agents := api.Group("/agents")
+		agents.Use(middleware.AuthMiddleware())
+		{
+			agents.GET("", ticketHandler.GetAgents)
+		}
+
 		auth := api.Group("/auth")
 		{
 			auth.POST("/login/hsi", authHandler.LoginHSI)
