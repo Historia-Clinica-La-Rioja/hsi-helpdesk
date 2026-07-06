@@ -36,7 +36,6 @@ func main() {
 	// Inicialización de Prioridades
 	priorityRepo := repositories.NewPriorityRepository(db)
 	priorityHandler := handlers.NewPriorityHandler(priorityRepo)
-	// 👇 NUEVO: Inicialización de FAQs (Faltaba esto para que no dé error)
 	faqRepo := repositories.NewFaqRepository(db)
 	faqHandler := handlers.NewFaqHandler(faqRepo)
 
@@ -54,69 +53,47 @@ func main() {
 	})
 
 	api := router.Group("/api")
-	{
-		// 👇 NUEVO: La ruta de instituciones va directo bajo "/api"
-		// (A menos que quieras protegerla con AuthMiddleware, en ese caso iría adentro de un grupo protegido)
-		api.GET("/institutions", institutionHandler.GetInstitutions)
+    {
+        auth := api.Group("/auth")
+        {
+            auth.POST("/login/hsi", authHandler.LoginHSI)
+            auth.POST("/login/agent", authHandler.LoginAgent)
+            auth.POST("/login/sso", authHandler.LoginSSO)
+            auth.POST("/logout", authHandler.Logout)
+        }
 
-		tickets := api.Group("/tickets")
-		tickets.Use(middleware.AuthMiddleware())
-		{
-			tickets.POST("", ticketHandler.CreateTicket)
-			tickets.GET("", ticketHandler.GetTickets)
-			tickets.GET("/:id", ticketHandler.GetTicket)
-			tickets.PUT("/:id", ticketHandler.UpdateTicket)
-			tickets.PUT("/:id/status", ticketHandler.UpdateTicketStatus)
-			tickets.PUT("/:id/assign", ticketHandler.AssignTicket)
-			tickets.POST("/:id/messages", ticketHandler.AddMessage)
-		}
+        // 🔒 RUTAS PROTEGIDAS (Requieren token JWT válido)
+        protected := api.Group("/")
+        protected.Use(middleware.AuthMiddleware())
+        {
+            protected.GET("/institutions", institutionHandler.GetInstitutions)
+            protected.GET("/faqs", faqHandler.GetFaqs)
 
-		priorities := api.Group("/priorities")
-		priorities.Use(middleware.AuthMiddleware())
-		{
-			priorities.GET("", priorityHandler.GetPriorities)
-		}
+            // Grupo Tickets
+            tickets := protected.Group("/tickets")
+            {
+                tickets.POST("", ticketHandler.CreateTicket)
+                tickets.GET("", ticketHandler.GetTickets)
+                tickets.GET("/:id", ticketHandler.GetTicket)
+                tickets.PUT("/:id", ticketHandler.UpdateTicket)
+                tickets.PUT("/:id/status", ticketHandler.UpdateTicketStatus)
+                tickets.PUT("/:id/assign", ticketHandler.AssignTicket)
+                tickets.POST("/:id/messages", ticketHandler.AddMessage)
+            }
 
-		agents := api.Group("/agents")
-		agents.Use(middleware.AuthMiddleware())
-		{
-			agents.GET("", ticketHandler.GetAgents)
-		}
+            // Grupo Prioridades
+            priorities := protected.Group("/priorities")
+            {
+                priorities.GET("", priorityHandler.GetPriorities)
+            }
 
-		auth := api.Group("/auth")
-		{
-			auth.POST("/login/hsi", authHandler.LoginHSI)
-			auth.POST("/login/agent", authHandler.LoginAgent)
-			auth.POST("/login/sso", authHandler.LoginSSO)
-			auth.POST("/logout", authHandler.Logout)
-		}
-
-		// 👇 SEGURIDAD: Grupo de rutas protegidas
-		// Todo lo que esté adentro de este bloque requiere un token JWT válido
-		protected := api.Group("/")
-		protected.Use(middleware.AuthMiddleware())
-		{
-			// Protegemos estas rutas para evitar fuga de información (data scraping)
-			protected.GET("/institutions", institutionHandler.GetInstitutions)
-			protected.GET("/faqs", faqHandler.GetFaqs)
-
-			tickets := protected.Group("/tickets")
-			{
-				tickets.POST("", ticketHandler.CreateTicket)
-				tickets.GET("", ticketHandler.GetTickets)
-				tickets.GET("/:id", ticketHandler.GetTicket)
-				tickets.PUT("/:id", ticketHandler.UpdateTicket)
-				tickets.PUT("/:id/status", ticketHandler.UpdateTicketStatus)
-				tickets.PUT("/:id/assign", ticketHandler.AssignTicket)
-				tickets.POST("/:id/messages", ticketHandler.AddMessage)
-			}
-
-			agents := protected.Group("/agents")
-			{
-				agents.GET("", ticketHandler.GetAgents)
-			}
-		}
-	}
+            // Grupo Agentes
+            agents := protected.Group("/agents")
+            {
+                agents.GET("", ticketHandler.GetAgents)
+            }
+        }
+    }
 
 	address := fmt.Sprintf(":%s", cfg.ServerPort)
 	log.Printf("Servidor iniciado en el puerto %s", cfg.ServerPort)
