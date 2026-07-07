@@ -346,9 +346,10 @@ func (s *ticketService) AddMessage(userObjectID primitive.ObjectID, role string,
 	}
 
 	// Access Control: if ticket is assigned to an agent, only that agent can respond
-	if roleLower == "agent" || roleLower == "owner" || roleLower == "admin" {
+	if dbT.CreatedBy != userObjectID {
+	
 		if dbT.AssignedTo != nil && *dbT.AssignedTo != userObjectID {
-			return nil, errors.New("solo el agente asignado puede responder a este ticket")
+			return nil, errors.New("solo el agente asignado o el creador del ticket pueden responder")
 		}
 	}
 

@@ -37,7 +37,7 @@ export interface Ticket {
 export class TicketService {
   private http = inject(HttpClient);
   private auth = inject(AuthService);
-  private apiUrl = 'http://localhost:8083/api';
+  private apiUrl = '/api';
 
   private allTickets = signal<Ticket[]>([]);
 

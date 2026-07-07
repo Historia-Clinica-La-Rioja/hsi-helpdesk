@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/config"
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/handlers"
@@ -99,6 +101,24 @@ func main() {
 			}
 		}
 	}
+
+	router.NoRoute(func(c *gin.Context) {
+		path := c.Request.URL.Path
+
+		// . Si la ruta buscada empieza con /api, es un error del backend real (404)
+		if strings.HasPrefix(path, "/api") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Endpoint not found"})
+			return
+		}
+
+		if _, err := os.Stat("./public" + path); err == nil && path != "/" {
+			c.File("./public" + path)
+			return
+		}
+
+		// . SPA Fallback: Para cualquier otra ruta (ej: /login, /tickets), 
+		c.File("./public/index.html")
+	})
 
 	address := fmt.Sprintf(":%s", cfg.ServerPort)
 	log.Printf("Servidor iniciado en el puerto %s", cfg.ServerPort)
