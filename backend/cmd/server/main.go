@@ -53,53 +53,47 @@ func main() {
 	})
 
 	api := router.Group("/api")
-    {
-        auth := api.Group("/auth")
-        {
-            auth.POST("/login/hsi", authHandler.LoginHSI)
-            auth.POST("/login/agent", authHandler.LoginAgent)
-            auth.POST("/login/sso", authHandler.LoginSSO)
-            auth.POST("/logout", authHandler.Logout)
-        }
+	{
 
-        // 🔒 RUTAS PROTEGIDAS (Requieren token JWT válido)
-        protected := api.Group("/")
-        protected.Use(middleware.AuthMiddleware())
-        {
-            protected.GET("/institutions", institutionHandler.GetInstitutions)
-            protected.GET("/faqs", faqHandler.GetFaqs)
+		auth := api.Group("/auth")
+		{
+			auth.POST("/login/hsi", authHandler.LoginHSI)
+			auth.POST("/login/agent", authHandler.LoginAgent)
+			auth.POST("/login/sso", authHandler.LoginSSO)
+			auth.POST("/logout", authHandler.Logout)
+		}
 
-            // Grupo Tickets
-            tickets := protected.Group("/tickets")
-            {
-                tickets.POST("", ticketHandler.CreateTicket)
-                tickets.GET("", ticketHandler.GetTickets)
-                tickets.GET("/:id", ticketHandler.GetTicket)
-                tickets.PUT("/:id", ticketHandler.UpdateTicket)
-                tickets.PUT("/:id/status", ticketHandler.UpdateTicketStatus)
-                tickets.PUT("/:id/assign", ticketHandler.AssignTicket)
-                tickets.POST("/:id/messages", ticketHandler.AddMessage)
-            }
+		// 👇 SEGURIDAD: Grupo de rutas protegidas
+		// Todo lo que esté adentro de este bloque requiere un token JWT válido
+		protected := api.Group("/")
+		protected.Use(middleware.AuthMiddleware())
+		{
+			// Protegemos estas rutas para evitar fuga de información (data scraping)
+			protected.GET("/institutions", institutionHandler.GetInstitutions)
+			protected.GET("/faqs", faqHandler.GetFaqs)
 
-            // Grupo Prioridades
-            priorities := protected.Group("/priorities")
-            {
-                priorities.GET("", priorityHandler.GetPriorities)
-            }
+			tickets := protected.Group("/tickets")
+			{
+				tickets.POST("", ticketHandler.CreateTicket)
+				tickets.GET("", ticketHandler.GetTickets)
+				tickets.GET("/:id", ticketHandler.GetTicket)
+				tickets.PUT("/:id", ticketHandler.UpdateTicket)
+				tickets.PUT("/:id/status", ticketHandler.UpdateTicketStatus)
+				tickets.PUT("/:id/assign", ticketHandler.AssignTicket)
+				tickets.POST("/:id/messages", ticketHandler.AddMessage)
+			}
 
-            // Grupo Agentes
-            agents := protected.Group("/agents")
-            {
-                agents.GET("", ticketHandler.GetAgents)
-            }
+			priorities := protected.Group("/priorities")
+			{
+				priorities.GET("", priorityHandler.GetPriorities)
+			}
 
-            // Grupo Etiquetas
-            tags := protected.Group("/tags")
-            {
-                tags.GET("", ticketHandler.GetTags)
-            }
-        }
-    }
+			agents := protected.Group("/agents")
+			{
+				agents.GET("", ticketHandler.GetAgents)
+			}
+		}
+	}
 
 	address := fmt.Sprintf(":%s", cfg.ServerPort)
 	log.Printf("Servidor iniciado en el puerto %s", cfg.ServerPort)
