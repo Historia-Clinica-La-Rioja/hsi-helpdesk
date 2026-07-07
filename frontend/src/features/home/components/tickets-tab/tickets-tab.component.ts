@@ -2719,41 +2719,41 @@ export class TicketsTabComponent implements OnInit {
     this.initForm();
     this.initReadTickets();
 
-    // Periodic sync interval (5 seconds)
-    const intervalId = setInterval(() => {
-      const user = this.authService.currentUser();
-      if (user) {
-        this.ticketService.loadTicketsForUser(user.username);
+    //  // Periodic sync interval (5 seconds)
+    // const intervalId = setInterval(() => {
+    //   const user = this.authService.currentUser();
+    //   if (user) {
+    //     this.ticketService.loadTicketsForUser(user.username);
 
-        // Also if in detail view, sync details
-        const sel = this.selectedTicket();
-        if (sel && this.innerViewMode() === 'detail') {
-          this.ticketService.getTicketDetails(sel.id).subscribe({
-            next: (updatedTicket) => {
-              if (!this.isEditing()) {
-                const parsed = {
-                  ...updatedTicket,
-                  created_at: new Date(updatedTicket.created_at),
-                  updated_at: new Date(updatedTicket.updated_at),
-                  closed_at: updatedTicket.closed_at ? new Date(updatedTicket.closed_at) : undefined,
-                  resolved_at: updatedTicket.resolved_at ? new Date(updatedTicket.resolved_at) : undefined,
-                  reopened_at: updatedTicket.reopened_at ? new Date(updatedTicket.reopened_at) : undefined,
-                  messages: updatedTicket.messages ? updatedTicket.messages.map((m: any) => ({
-                    ...m,
-                    created_at: new Date(m.created_at)
-                  })) : []
-                };
-                this.selectedTicket.set(parsed);
-              }
-            }
-          });
-        }
-      }
-    }, 5000);
+    //     // Also if in detail view, sync details
+    //     const sel = this.selectedTicket();
+    //     if (sel && this.innerViewMode() === 'detail') {
+    //       this.ticketService.getTicketDetails(sel.id).subscribe({
+    //         next: (updatedTicket) => {
+    //           if (!this.isEditing()) {
+    //             const parsed = {
+    //               ...updatedTicket,
+    //               created_at: new Date(updatedTicket.created_at),
+    //               updated_at: new Date(updatedTicket.updated_at),
+    //               closed_at: updatedTicket.closed_at ? new Date(updatedTicket.closed_at) : undefined,
+    //               resolved_at: updatedTicket.resolved_at ? new Date(updatedTicket.resolved_at) : undefined,
+    //               reopened_at: updatedTicket.reopened_at ? new Date(updatedTicket.reopened_at) : undefined,
+    //               messages: updatedTicket.messages ? updatedTicket.messages.map((m: any) => ({
+    //                 ...m,
+    //                 created_at: new Date(m.created_at)
+    //               })) : []
+    //             };
+    //             this.selectedTicket.set(parsed);
+    //           }
+    //         }
+    //       });
+    //     }
+    //   }
+    // }, 5000);
 
-    this.destroyRef.onDestroy(() => {
-      clearInterval(intervalId);
-    });
+    // this.destroyRef.onDestroy(() => {
+    //   clearInterval(intervalId);
+    // });
 
     // Seed initial user email if logged in
     effect(() => {
@@ -2782,6 +2782,11 @@ export class TicketsTabComponent implements OnInit {
     this.loadInstitutions();
     this.loadPriorities();
     this.loadTags();
+    
+    const user = this.authService.currentUser();
+    if (user) {
+      this.ticketService.loadTicketsForUser(user.username);
+    }
   }
 
   loadInstitutions() {
