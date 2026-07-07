@@ -141,12 +141,12 @@ export interface Priority {
                   </div>
                   
                   <mat-chip-listbox multiple class="tags-chip-list">
-                    @for (tag of availableTags; track tag) {
+                    @for (tag of systemTags(); track tag.id) {
                       <mat-chip-option 
-                        [selected]="selectedTags().includes(tag)"
-                        (selectionChange)="toggleTag(tag, $event.selected)"
+                        [selected]="selectedTags().includes(tag.id)"
+                        (selectionChange)="toggleTag(tag.id, $event.selected)"
                       >
-                        {{ tag }}
+                        {{ tag.name }}
                       </mat-chip-option>
                     }
                   </mat-chip-listbox>
@@ -561,17 +561,16 @@ export interface Priority {
 
                         <div class="separator-v"></div>
 
-                        <!-- Assignment Dropdown -->
-                        <div class="admin-control-group">
-                          <label class="control-label">Transferir Ticket</label>
-                          <select [value]="ticket.assigned_to || ''" (change)="onAssignChange(ticket.id, $event)">
-                            <option value="">-- Seleccionar Agente --</option>
-                            @for (agent of agentsList(); track agent.id) {
-                              <option [value]="agent.id">
-                                {{ agent.first_name }} {{ agent.last_name }} ({{ agent.username }})
-                              </option>
-                            }
-                          </select>
+                        <!-- Assignment Modal Trigger Button -->
+                        <div class="status-buttons-group">
+                          <button 
+                            type="button" 
+                            class="transfer-action-btn"
+                            (click)="openTransferModal(ticket)"
+                          >
+                            <span class="material-icons" style="font-size: 16px; vertical-align: middle;">swap_horiz</span>
+                            Transferir Ticket
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -669,6 +668,152 @@ export interface Priority {
 
             </div>
           }
+        </div>
+      }
+
+      <!-- Transfer Ticket Modal -->
+      @if (showTransferModal()) {
+        <div class="transfer-modal-overlay">
+          <div class="transfer-modal-container">
+            <div class="transfer-modal-header">
+              <h3>Transferir ticket</h3>
+              <button type="button" class="close-modal-btn" (click)="closeTransferModal()">
+                <span class="material-icons">close</span>
+              </button>
+            </div>
+            
+            <p class="transfer-modal-subtitle">Seleccioná el agente destino y el motivo</p>
+            
+            <!-- Search bar -->
+            <div class="transfer-search-container">
+              <span class="material-icons search-icon">search</span>
+              <input 
+                type="text" 
+                placeholder="Buscar agente o especialización..." 
+                [ngModel]="transferSearchQuery()"
+                (ngModelChange)="transferSearchQuery.set($event)"
+              />
+            </div>
+            
+            <!-- Tags (Specializations) -->
+            <div class="transfer-tags-container">
+              <button 
+                type="button" 
+                class="tag-chip-btn" 
+                [class.active]="selectedSpecializationFilter() === 'Todos'"
+                (click)="selectedSpecializationFilter.set('Todos')"
+              >
+                Todos
+              </button>
+              @for (spec of availableSpecializations(); track spec) {
+                <button 
+                  type="button" 
+                  class="tag-chip-btn" 
+                  [class.active]="selectedSpecializationFilter() === spec"
+                  (click)="selectedSpecializationFilter.set(spec)"
+                >
+                  {{ spec }}
+                </button>
+              }
+            </div>
+            
+            <!-- Online / Offline status toggle -->
+            <div class="status-filters-container">
+              <button 
+                type="button" 
+                class="status-filter-btn" 
+                [class.active]="onlineStatusFilter() === 'online'"
+                (click)="onlineStatusFilter.set('online')"
+              >
+                <span class="status-dot green"></span>
+                En línea
+              </button>
+              <button 
+                type="button" 
+                class="status-filter-btn" 
+                [class.active]="onlineStatusFilter() === 'offline'"
+                (click)="onlineStatusFilter.set('offline')"
+              >
+                <span class="status-dot gray"></span>
+                Fuera de línea
+              </button>
+            </div>
+            
+            <!-- Agents List -->
+            <div class="transfer-agents-list">
+              @for (agent of filteredAgentsForTransfer(); track agent.id) {
+                <div 
+                  class="agent-transfer-row"
+                  [class.selected]="selectedTransferAgentId() === agent.id"
+                  [class.disabled]="!agent.is_active"
+                  (click)="selectAgentForTransfer(agent)"
+                >
+                  <div class="agent-avatar-circle">
+                    {{ getAgentInitials(agent) }}
+                    <span class="avatar-status-dot" [class.online]="agent.is_active"></span>
+                  </div>
+                  
+                  <div class="agent-info-col">
+                    <span class="agent-name-text">{{ agent.first_name }} {{ agent.last_name }}</span>
+                    <span class="agent-spec-text">{{ agent.specialization }}</span>
+                  </div>
+                  
+                  <div class="agent-chats-col">
+                    @if (agent.is_active) {
+                      <div class="active-chats-badge">
+                        <span class="material-icons chat-icon">chat_bubble_outline</span>
+                        <span>{{ agent.active_chats }} {{ agent.active_chats === 1 ? 'chat' : 'chats' }}</span>
+                      </div>
+                    } @else {
+                      <span class="no-available-text">No disponible</span>
+                    }
+                  </div>
+                </div>
+              } @empty {
+                <div class="empty-agents-message">
+                  No se encontraron agentes que coincidan con los filtros.
+                </div>
+              }
+            </div>
+            
+            <!-- Reason Textarea -->
+            <div class="transfer-reason-container">
+              <label class="reason-label">Motivo de la transferencia (Obligatorio)</label>
+              <textarea 
+                placeholder="Escribe el motivo detallado de la transferencia aquí..."
+                [ngModel]="transferReason()"
+                (ngModelChange)="transferReason.set($event)"
+                rows="3"
+                required
+              ></textarea>
+            </div>
+            
+            <!-- Modal Actions -->
+            <div class="transfer-modal-actions">
+              <span class="selected-agent-indicator">
+                @if (selectedTransferAgentId()) {
+                  Transferir a: <strong>{{ getSelectedAgentName() }}</strong>
+                } @else {
+                  Selecciona un agente disponible
+                }
+              </span>
+              
+              <div class="modal-buttons-group">
+                <button type="button" class="cancel-modal-btn" (click)="closeTransferModal()">
+                  Cancelar
+                </button>
+                <button 
+                  type="button" 
+                  class="confirm-transfer-btn" 
+                  [disabled]="isTransferDisabled()"
+                  (click)="confirmTransfer()"
+                >
+                  <span class="material-icons">trending_flat</span>
+                  Transferir
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       }
     </div>
@@ -1891,6 +2036,432 @@ export interface Priority {
       font-size: 14px;
       font-weight: 600;
     }
+
+    /* Modal Overlay Styles */
+    .transfer-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(0, 0, 0, 0.4);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      backdrop-filter: blur(4px);
+    }
+    
+    .transfer-modal-container {
+      background-color: #ffffff;
+      width: 600px;
+      max-width: 95%;
+      max-height: 95vh;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      font-family: 'DM Sans', sans-serif;
+      box-sizing: border-box;
+    }
+    
+    .transfer-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    
+    .transfer-modal-header h3 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #1a202c;
+      margin: 0;
+    }
+    
+    .close-modal-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #718096;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+      border-radius: 50%;
+      transition: background-color 0.2s;
+    }
+    
+    .close-modal-btn:hover {
+      background-color: #f7fafc;
+      color: #2d3748;
+    }
+    
+    .transfer-modal-subtitle {
+      color: #718096;
+      font-size: 14px;
+      margin-top: 0;
+      margin-bottom: 12px;
+      text-align: left;
+    }
+    
+    .transfer-search-container {
+      position: relative;
+      margin-bottom: 12px;
+    }
+    
+    .transfer-search-container .search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #a0aec0;
+      font-size: 18px;
+    }
+    
+    .transfer-search-container input {
+      width: 100%;
+      padding: 8px 12px 8px 36px;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      box-sizing: border-box;
+    }
+    
+    .transfer-search-container input:focus {
+      border-color: #3182ce;
+      box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
+    }
+    
+    .transfer-tags-container {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    
+    .tag-chip-btn {
+      background-color: #f7fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 5px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #4a5568;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .tag-chip-btn:hover {
+      background-color: #edf2f7;
+      color: #2d3748;
+    }
+    
+    .tag-chip-btn.active {
+      background-color: #1a202c;
+      color: #ffffff;
+      border-color: #1a202c;
+    }
+    
+    .status-filters-container {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+      font-size: 13px;
+    }
+    
+    .status-filter-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      color: #718096;
+      font-weight: 500;
+      transition: background-color 0.2s;
+    }
+    
+    .status-filter-btn:hover {
+      background-color: #f7fafc;
+    }
+    
+    .status-filter-btn.active {
+      background-color: #edf2f7;
+      color: #2d3748;
+    }
+    
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    
+    .status-dot.green {
+      background-color: #48bb78;
+    }
+    
+    .status-dot.gray {
+      background-color: #a0aec0;
+    }
+    
+    .transfer-agents-list {
+      flex: 1;
+      overflow-y: auto;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      margin-bottom: 12px;
+      max-height: 120px;
+      min-height: 90px;
+    }
+    
+    .agent-transfer-row {
+      display: flex;
+      align-items: center;
+      padding: 8px 16px;
+      cursor: pointer;
+      border-bottom: 1px solid #f7fafc;
+      transition: background-color 0.2s;
+    }
+    
+    .agent-transfer-row:last-child {
+      border-bottom: none;
+    }
+    
+    .agent-transfer-row:hover {
+      background-color: #f7fafc;
+    }
+    
+    .agent-transfer-row.selected {
+      background-color: #ebf8ff;
+    }
+    
+    .agent-transfer-row.disabled {
+      cursor: not-allowed;
+      opacity: 0.65;
+    }
+    
+    .agent-avatar-circle {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background-color: #2d3748;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 14px;
+      position: relative;
+      margin-right: 12px;
+    }
+    
+    .avatar-status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 2px solid #ffffff;
+      position: absolute;
+      bottom: 0px;
+      right: 0px;
+      background-color: #a0aec0;
+    }
+    
+    .avatar-status-dot.online {
+      background-color: #48bb78;
+    }
+    
+    .agent-info-col {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      text-align: left;
+    }
+    
+    .agent-name-text {
+      font-size: 15px;
+      font-weight: 600;
+      color: #2d3748;
+    }
+    
+    .agent-spec-text {
+      font-size: 13px;
+      color: #718096;
+      margin-top: 2px;
+    }
+    
+    .agent-chats-col {
+      display: flex;
+      align-items: center;
+    }
+    
+    .active-chats-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #718096;
+      font-size: 14px;
+    }
+    
+    .active-chats-badge .chat-icon {
+      font-size: 18px;
+    }
+    
+    .no-available-text {
+      color: #a0aec0;
+      font-size: 14px;
+      font-style: italic;
+    }
+    
+    .empty-agents-message {
+      padding: 30px;
+      text-align: center;
+      color: #718096;
+      font-size: 15px;
+    }
+    
+    .transfer-reason-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 24px;
+      text-align: left;
+    }
+    
+    .reason-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: #4a5568;
+    }
+    
+    .transfer-reason-container textarea {
+      padding: 10px 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      font-family: inherit;
+      font-size: 14px;
+      outline: none;
+      resize: none;
+      height: 65px;
+      box-sizing: border-box;
+      transition: border-color 0.2s;
+    }
+    
+    .transfer-reason-container textarea:focus {
+      border-color: #3182ce;
+    }
+    
+    .transfer-modal-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 15px;
+      padding-top: 15px;
+      border-top: 1px solid #edf2f7;
+    }
+    
+    .selected-agent-indicator {
+      font-size: 14px;
+      color: #718096;
+    }
+    
+    .modal-buttons-group {
+      display: flex;
+      gap: 12px;
+    }
+    
+    .cancel-modal-btn {
+      background-color: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #4a5568;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    
+    .cancel-modal-btn:hover {
+      background-color: #f7fafc;
+    }
+    
+    .confirm-transfer-btn {
+      background-color: #3182ce;
+      border: none;
+      border-radius: 12px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #ffffff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background-color 0.2s;
+    }
+    
+    .confirm-transfer-btn:hover {
+      background-color: #2b6cb0;
+    }
+    
+    .confirm-transfer-btn:disabled {
+      background-color: #cbd5e0;
+      cursor: not-allowed;
+    }
+    
+    .transfer-modal-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background-color: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #4a5568;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .transfer-action-btn {
+      background-color: #0288D1;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-family: var(--font-heading);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background-color 0.2s, transform 0.1s;
+      outline: none;
+    }
+    .transfer-action-btn:hover {
+      background-color: #0277BD;
+    }
+    .transfer-action-btn:active {
+      transform: scale(0.97);
+    }
+    
+    .transfer-modal-btn:hover {
+      background-color: #f7fafc;
+      border-color: #cbd5e0;
+    }
+    
+    .transfer-modal-btn .material-icons {
+      font-size: 18px;
+    }
   `]
 })
 
@@ -1904,6 +2475,76 @@ export class TicketsTabComponent implements OnInit {
   readTicketIds = signal<string[]>([]);
   selectedStatusFilter = signal<'todos' | 'abierto' | 'en_progreso' | 'reabierto' | 'transferido' | 'resuelto' | 'cerrado'>('todos');
   searchQuery = signal<string>('');
+
+  systemTags = signal<any[]>([]);
+
+  // Transfer modal signals
+  showTransferModal = signal(false);
+  ticketToTransfer = signal<Ticket | null>(null);
+  transferSearchQuery = signal('');
+  selectedSpecializationFilter = signal('Todos');
+  onlineStatusFilter = signal<'todos' | 'online' | 'offline'>('todos');
+  selectedTransferAgentId = signal('');
+  transferReason = signal('');
+
+  availableSpecializations = computed(() => {
+    const list = this.systemTags().map(t => t.name);
+    // Combine 'Acceso' and 'Autenticación' if both are in list to match screenshot
+    const hasAcceso = list.some(t => t.toLowerCase() === 'acceso');
+    const hasAutenticacion = list.some(t => t.toLowerCase() === 'autenticación' || t.toLowerCase() === 'autenticacion');
+    let filtered = list.filter(t => t.toLowerCase() !== 'acceso' && t.toLowerCase() !== 'autenticación' && t.toLowerCase() !== 'autenticacion');
+    if (hasAcceso || hasAutenticacion) {
+      filtered = ['Acceso y Autenticación', ...filtered];
+    }
+    return filtered;
+  });
+
+  filteredAgentsForTransfer = computed(() => {
+    const query = this.transferSearchQuery().toLowerCase().trim();
+    const specFilter = this.selectedSpecializationFilter();
+    const statusFilter = this.onlineStatusFilter();
+
+    return this.agentsList().filter(agent => {
+      // 1. Text Search Filter
+      const name = `${agent.first_name} ${agent.last_name}`.toLowerCase();
+      const spec = (agent.specialization || '').toLowerCase();
+      const matchesSearch = !query || name.includes(query) || spec.includes(query);
+
+      // 2. Specialization Chip Filter
+      let matchesSpec = true;
+      if (specFilter !== 'Todos') {
+        if (specFilter === 'Acceso y Autenticación') {
+          matchesSpec = agent.specialization === 'Acceso' || agent.specialization === 'Autenticación' || agent.specialization === 'Acceso y Autenticación';
+        } else {
+          matchesSpec = agent.specialization === specFilter;
+        }
+      }
+
+      // 3. Online/Offline Status Filter
+      let matchesStatus = true;
+      if (statusFilter === 'online') {
+        matchesStatus = agent.is_active === true;
+      } else if (statusFilter === 'offline') {
+        matchesStatus = agent.is_active === false;
+      }
+
+      return matchesSearch && matchesSpec && matchesStatus;
+    });
+  });
+
+  isTransferDisabled = computed(() => {
+    const agentId = this.selectedTransferAgentId();
+    const reason = this.transferReason().trim();
+
+    // Disabled if no agent selected, or reason is less than 4 chars
+    if (!agentId || reason.length < 4) {
+      return true;
+    }
+
+    // Also disable if the selected agent is not active (offline)
+    const agent = this.agentsList().find(a => a.id === agentId);
+    return !agent || !agent.is_active;
+  });
 
   // Agent dynamic statistics cards
   statsTotal = computed(() => this.ticketService.tickets().length);
@@ -2135,12 +2776,13 @@ export class TicketsTabComponent implements OnInit {
     // Al iniciar el componente, traemos las instituciones y prioridades de la base de datos
     this.loadInstitutions();
     this.loadPriorities();
+    this.loadTags();
   }
 
   loadInstitutions() {
     // Usamos la clave exacta que vimos en el navegador
-    const token = localStorage.getItem('hsi_token'); 
-    
+    const token = localStorage.getItem('hsi_token');
+
     // Armamos el encabezado con el token
     const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
 
@@ -2587,6 +3229,93 @@ export class TicketsTabComponent implements OnInit {
   onSearchInput(event: Event): void {
     const val = (event.target as HTMLInputElement).value;
     this.searchQuery.set(val);
+  }
+
+  loadTags() {
+    this.ticketService.getTags().subscribe({
+      next: (tags) => {
+        if (tags && tags.length > 0) {
+          this.systemTags.set(tags);
+        } else {
+          this.setMockSystemTags();
+        }
+      },
+      error: (err) => {
+        console.error('Error loading tags from backend:', err);
+        this.setMockSystemTags();
+      }
+    });
+  }
+
+  setMockSystemTags() {
+    this.systemTags.set([
+      { id: '6a4bb000a9ad10c7c59df8a3', name: 'Acceso' },
+      { id: '6a4bb000a9ad10c7c59df8a4', name: 'Autenticación' },
+      { id: '6a4bb000a9ad10c7c59df8a5', name: 'Historia clínica' },
+      { id: '6a4bb000a9ad10c7c59df8a6', name: 'Odontología' },
+      { id: '6a4bb000a9ad10c7c59df8a7', name: 'Snomed CT' },
+      { id: '6a4bb000a9ad10c7c59df8a8', name: 'Administración' },
+      { id: '6a4bb000a9ad10c7c59df8a9', name: 'Facturacion' },
+      { id: '6a4bb000a9ad10c7c59df8aa', name: 'Turnos' }
+    ]);
+  }
+
+  openTransferModal(ticket: Ticket): void {
+    this.ticketToTransfer.set(ticket);
+    this.selectedTransferAgentId.set('');
+    this.transferReason.set('');
+    this.transferSearchQuery.set('');
+    this.selectedSpecializationFilter.set('Todos');
+    this.onlineStatusFilter.set('todos');
+    this.showTransferModal.set(true);
+  }
+
+  closeTransferModal(): void {
+    this.showTransferModal.set(false);
+    this.ticketToTransfer.set(null);
+  }
+
+  selectAgentForTransfer(agent: any): void {
+    if (!agent.is_active) return; // Cannot select inactive agents
+    this.selectedTransferAgentId.set(agent.id);
+  }
+
+  getSelectedAgentName(): string {
+    const agent = this.agentsList().find(a => a.id === this.selectedTransferAgentId());
+    return agent ? `${agent.first_name} ${agent.last_name}` : '';
+  }
+
+  getAgentInitials(agent: any): string {
+    const fn = agent.first_name || '';
+    const ln = agent.last_name || '';
+    return (fn.charAt(0) + ln.charAt(0)).toUpperCase() || agent.username.charAt(0).toUpperCase();
+  }
+
+  confirmTransfer(): void {
+    const ticketId = this.ticketToTransfer()?.id;
+    const agentId = this.selectedTransferAgentId();
+    const reason = this.transferReason().trim();
+
+    if (!ticketId || !agentId || reason.length < 4) return;
+
+    this.ticketService.assignTicket(ticketId, agentId, reason).subscribe({
+      next: (updatedTicket) => {
+        const parsed = {
+          ...updatedTicket,
+          created_at: new Date(updatedTicket.created_at),
+          updated_at: new Date(updatedTicket.updated_at),
+          messages: updatedTicket.messages ? updatedTicket.messages.map((m: any) => ({
+            ...m,
+            created_at: new Date(m.created_at)
+          })) : []
+        };
+        this.selectedTicket.set(parsed);
+        this.closeTransferModal();
+      },
+      error: (err) => {
+        console.error('Error transferring ticket:', err);
+      }
+    });
   }
 }
 
