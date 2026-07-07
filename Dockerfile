@@ -13,7 +13,7 @@ RUN npm run build -- --configuration=production
 # ==========================================
 # ETAPA 2: Construir Backend (Go)
 # ==========================================
-FROM golang:1.21-alpine AS backend-build
+FROM golang:alpine AS backend-build
 WORKDIR /app/backend
 # Copiamos dependencias de Go
 COPY backend/go.mod backend/go.sum ./
