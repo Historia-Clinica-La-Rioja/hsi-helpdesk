@@ -21,6 +21,7 @@ type TicketRepository interface {
 	FindOrCreateInstitutionByName(name string) (*models.DBInstitution, error)
 	FindUserByID(id primitive.ObjectID) (*models.User, error)
 	GetAgents() ([]models.User, error)
+	CountActiveTicketsByAgent(agentID primitive.ObjectID) (int, error)
 
 	FindPriorityByName(name string) (*models.Priority, error)
 	FindPriorityByID(id primitive.ObjectID) (*models.Priority, error)
@@ -319,5 +320,26 @@ func (r *ticketRepository) GetAllTags() ([]models.DBTag, error) {
 		return nil, err
 	}
 	return tags, nil
+}
+
+func (r *ticketRepository) CountActiveTicketsByAgent(agentID primitive.ObjectID) (int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resueltoID, _ := primitive.ObjectIDFromHex("6a20234c2660243a1e9df8a6")
+	cerradoID, _ := primitive.ObjectIDFromHex("6a20234c2660243a1e9df8a7")
+
+	filter := bson.M{
+		"assigned_to": agentID,
+		"state_id": bson.M{
+			"$nin": []primitive.ObjectID{resueltoID, cerradoID},
+		},
+	}
+
+	count, err := r.ticketsCol.CountDocuments(ctx, filter)
+	if err != nil {
+		return 0, err
+	}
+	return int(count), nil
 }
 

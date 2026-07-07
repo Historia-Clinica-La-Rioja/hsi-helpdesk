@@ -92,6 +92,11 @@ func main() {
 			{
 				agents.GET("", ticketHandler.GetAgents)
 			}
+
+			tags := protected.Group("/tags")
+			{
+				tags.GET("", ticketHandler.GetTags)
+			}
 		}
 	}
 

@@ -103,10 +103,17 @@ func (s *ticketService) CreateTicket(createdBy primitive.ObjectID, req *models.A
 		return nil, errors.New("el ticket debe tener entre 1 y 5 etiquetas")
 	}
 
-	// Resolve tag names to ObjectIDs
+	// Resolve tag names/IDs to ObjectIDs
 	tagIDs := make([]primitive.ObjectID, 0, len(req.Tags))
-	for _, tagName := range req.Tags {
-		tag, err := s.ticketRepo.FindOrCreateTagByName(tagName)
+	for _, tagRef := range req.Tags {
+		if objID, err := primitive.ObjectIDFromHex(tagRef); err == nil {
+			tag, err := s.ticketRepo.FindTagByID(objID)
+			if err == nil {
+				tagIDs = append(tagIDs, tag.ID)
+				continue
+			}
+		}
+		tag, err := s.ticketRepo.FindOrCreateTagByName(tagRef)
 		if err == nil {
 			tagIDs = append(tagIDs, tag.ID)
 		}
@@ -175,12 +182,12 @@ func (s *ticketService) CreateTicket(createdBy primitive.ObjectID, req *models.A
 
 	// Resolve tags for the returned struct
 	tagMap := s.getTagMap()
-	resolvedTags := make([]string, 0, len(req.Tags))
-	for _, tagID := range req.Tags {
+	resolvedTags := make([]string, 0, len(dbTicket.Tags))
+	for _, tagID := range dbTicket.Tags {
 		if name, exists := tagMap[tagID]; exists {
 			resolvedTags = append(resolvedTags, name)
 		} else {
-			resolvedTags = append(resolvedTags, tagID)
+			resolvedTags = append(resolvedTags, tagID.Hex())
 		}
 	}
 	req.Tags = resolvedTags
@@ -201,7 +208,6 @@ func (s *ticketService) GetTickets(userObjectID primitive.ObjectID, role string)
 
 	tagMap := s.getTagMap()
 	apiTickets := make([]models.APITicket, 0, len(dbTickets))
-	tagMap := s.getTagMap()
 	for _, dbT := range dbTickets {
 		apiT := s.populateAPITicket(&dbT, tagMap)
 		apiTickets = append(apiTickets, *apiT)
@@ -577,7 +583,7 @@ func (s *ticketService) GetAgents() ([]models.User, error) {
 	}
 
 	// Fetch tags from the database to map as specializations
-	tags, err := s.ticketRepo.GetTags()
+	tags, err := s.ticketRepo.GetAllTags()
 	tagNames := []string{}
 	if err == nil && len(tags) > 0 {
 		for _, tag := range tags {
@@ -615,11 +621,37 @@ func (s *ticketService) GetAgents() ([]models.User, error) {
 	return agents, nil
 }
 
+func (s *ticketService) GetTags() ([]models.Tag, error) {
+	dbTags, err := s.ticketRepo.GetAllTags()
+	if err != nil {
+		return nil, err
+	}
+
+	tags := make([]models.Tag, 0, len(dbTags))
+	for _, t := range dbTags {
+		if len(t.Name) == 24 {
+			if _, err := primitive.ObjectIDFromHex(t.Name); err == nil {
+				continue
+			}
+		}
+		tags = append(tags, models.Tag{
+			ID:   t.ID,
+			Name: t.Name,
+		})
+	}
+	return tags, nil
+}
+
 func (s *ticketService) getTagMap() map[primitive.ObjectID]string {
 	tagMap := make(map[primitive.ObjectID]string)
 	tags, err := s.ticketRepo.GetAllTags()
 	if err == nil {
 		for _, t := range tags {
+			if len(t.Name) == 24 {
+				if _, err := primitive.ObjectIDFromHex(t.Name); err == nil {
+					continue
+				}
+			}
 			tagMap[t.ID] = t.Name
 		}
 	}
