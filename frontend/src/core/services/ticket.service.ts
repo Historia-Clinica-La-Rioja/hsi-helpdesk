@@ -249,10 +249,11 @@ export class TicketService {
     );
   }
 
-  assignTicket(id: string, agentId: string): Observable<any> {
+  assignTicket(id: string, agentId: string, reason?: string): Observable<any> {
     const token = this.auth.token();
     return this.http.put<any>(`${this.apiUrl}/tickets/${id}/assign`, {
-      assigned_to: agentId
+      assigned_to: agentId,
+      reason: reason || ''
     }, {
       headers: {
         'Authorization': `Bearer ${token}`
@@ -281,6 +282,15 @@ export class TicketService {
   getAgents(): Observable<any[]> {
     const token = this.auth.token();
     return this.http.get<any[]>(`${this.apiUrl}/agents`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+  }
+
+  getTags(): Observable<any[]> {
+    const token = this.auth.token();
+    return this.http.get<any[]>(`${this.apiUrl}/tags`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }

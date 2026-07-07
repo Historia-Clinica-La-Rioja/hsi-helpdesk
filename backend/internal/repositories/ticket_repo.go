@@ -28,6 +28,9 @@ type TicketRepository interface {
 	InsertMessage(msg *models.DBMessage) error
 	GetMessagesByTicketID(ticketID primitive.ObjectID) ([]models.DBMessage, error)
 	InsertAuditLog(log *models.AuditLog) error
+
+	GetTags() ([]models.Tag, error)
+	CountActiveTicketsByAgent(agentID primitive.ObjectID) (int, error)
 }
 
 type ticketRepository struct {
@@ -38,6 +41,7 @@ type ticketRepository struct {
 	institutionsCol *mongo.Collection
 	usersCol        *mongo.Collection
 	prioritiesCol   *mongo.Collection
+	tagsCol         *mongo.Collection
 }
 
 func NewTicketRepository(db *mongo.Database) TicketRepository {
@@ -49,6 +53,7 @@ func NewTicketRepository(db *mongo.Database) TicketRepository {
 		institutionsCol: db.Collection("InstitutionHSI"),
 		usersCol:        db.Collection("UsersHSI"),
 		prioritiesCol:   db.Collection("Priorities"),
+		tagsCol:         db.Collection("Tags"),
 	}
 }
 
@@ -249,4 +254,42 @@ func (r *ticketRepository) FindPriorityByID(id primitive.ObjectID) (*models.Prio
 		return nil, err
 	}
 	return &priority, nil
+}
+
+func (r *ticketRepository) GetTags() ([]models.Tag, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cursor, err := r.tagsCol.Find(ctx, bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var tags []models.Tag
+	if err := cursor.All(ctx, &tags); err != nil {
+		return nil, err
+	}
+	return tags, nil
+}
+
+func (r *ticketRepository) CountActiveTicketsByAgent(agentID primitive.ObjectID) (int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Active states: en_progreso (6a20234c2660243a1e9df8a4), reabierto (6a216e36c50ba547a89df8a3), transferido (6a20234c2660243a1e9df8a5)
+	epID, _ := primitive.ObjectIDFromHex("6a20234c2660243a1e9df8a4")
+	trID, _ := primitive.ObjectIDFromHex("6a20234c2660243a1e9df8a5")
+	raID, _ := primitive.ObjectIDFromHex("6a216e36c50ba547a89df8a3")
+
+	filter := bson.M{
+		"assigned_to": agentID,
+		"state_id":    bson.M{"$in": []primitive.ObjectID{epID, trID, raID}},
+	}
+
+	count, err := r.ticketsCol.CountDocuments(ctx, filter)
+	if err != nil {
+		return 0, err
+	}
+	return int(count), nil
 }
