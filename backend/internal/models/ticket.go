@@ -15,7 +15,7 @@ type DBTicket struct {
 	AssignedTo  *primitive.ObjectID `bson:"assigned_to" json:"assigned_to,omitempty"` // removed omitempty to enforce null serialization in MongoDB
 	Institution primitive.ObjectID  `bson:"institution" json:"institution"`
 	Attachments []string            `bson:"attachments" json:"attachments"`
-	Tags        []string            `bson:"tags" json:"tags"`
+	Tags        []primitive.ObjectID `bson:"tags" json:"tags"`
 	CreatedAt   time.Time           `bson:"created_at" json:"created_at"`
 	UpdatedAt   time.Time           `bson:"updated_at" json:"updated_at"` // required field in JSON schema
 	PriorityID  primitive.ObjectID  `bson:"priority_id" json:"priority_id"`
@@ -45,6 +45,12 @@ type AuditLog struct {
 	Type        string             `bson:"type" json:"type"` // "MESSAGE", etc.
 	Description string             `bson:"description" json:"description"`
 	InsertedAt  time.Time          `bson:"inserted_at" json:"inserted_at"`
+}
+
+// DBTag represents the schema of the Tags collection in MongoDB
+type DBTag struct {
+	ID   primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	Name string             `bson:"name" json:"name"`
 }
 
 // DBInstitution represents the schema of the InstitutionHSI collection in MongoDB

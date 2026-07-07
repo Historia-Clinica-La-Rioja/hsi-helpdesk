@@ -28,6 +28,11 @@ type TicketRepository interface {
 	InsertMessage(msg *models.DBMessage) error
 	GetMessagesByTicketID(ticketID primitive.ObjectID) ([]models.DBMessage, error)
 	InsertAuditLog(log *models.AuditLog) error
+
+	FindTagByName(name string) (*models.DBTag, error)
+	FindTagByID(id primitive.ObjectID) (*models.DBTag, error)
+	FindOrCreateTagByName(name string) (*models.DBTag, error)
+	GetAllTags() ([]models.DBTag, error)
 }
 
 type ticketRepository struct {
@@ -38,6 +43,7 @@ type ticketRepository struct {
 	institutionsCol *mongo.Collection
 	usersCol        *mongo.Collection
 	prioritiesCol   *mongo.Collection
+	tagsCol         *mongo.Collection
 }
 
 func NewTicketRepository(db *mongo.Database) TicketRepository {
@@ -49,6 +55,7 @@ func NewTicketRepository(db *mongo.Database) TicketRepository {
 		institutionsCol: db.Collection("InstitutionHSI"),
 		usersCol:        db.Collection("UsersHSI"),
 		prioritiesCol:   db.Collection("Priorities"),
+		tagsCol:         db.Collection("Tags"),
 	}
 }
 
@@ -250,3 +257,67 @@ func (r *ticketRepository) FindPriorityByID(id primitive.ObjectID) (*models.Prio
 	}
 	return &priority, nil
 }
+
+func (r *ticketRepository) FindTagByName(name string) (*models.DBTag, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var tag models.DBTag
+	filter := bson.M{"name": bson.M{"$regex": "^" + name + "$", "$options": "i"}}
+	err := r.tagsCol.FindOne(ctx, filter).Decode(&tag)
+	if err != nil {
+		return nil, err
+	}
+	return &tag, nil
+}
+
+func (r *ticketRepository) FindTagByID(id primitive.ObjectID) (*models.DBTag, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var tag models.DBTag
+	err := r.tagsCol.FindOne(ctx, bson.M{"_id": id}).Decode(&tag)
+	if err != nil {
+		return nil, err
+	}
+	return &tag, nil
+}
+
+func (r *ticketRepository) FindOrCreateTagByName(name string) (*models.DBTag, error) {
+	tag, err := r.FindTagByName(name)
+	if err == nil {
+		return tag, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	newTag := models.DBTag{
+		ID:   primitive.NewObjectID(),
+		Name: name,
+	}
+
+	_, err = r.tagsCol.InsertOne(ctx, &newTag)
+	if err != nil {
+		return nil, err
+	}
+	return &newTag, nil
+}
+
+func (r *ticketRepository) GetAllTags() ([]models.DBTag, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cursor, err := r.tagsCol.Find(ctx, bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var tags []models.DBTag
+	if err := cursor.All(ctx, &tags); err != nil {
+		return nil, err
+	}
+	return tags, nil
+}
+
