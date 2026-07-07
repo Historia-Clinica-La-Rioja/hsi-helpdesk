@@ -18,7 +18,9 @@ type User struct {
 	// Go que lea "enable" de Mongo, pero Angular lo seguirá viendo como "is_active"
 	IsActive    bool   `bson:"enable" json:"is_active"`
 	DNI         string `bson:"identification_number,omitempty" json:"dni,omitempty"`
-	FirstName   string `bson:"first_name,omitempty" json:"first_name,omitempty"`
-	MiddleNames string `bson:"middle_names,omitempty" json:"middle_names,omitempty"`
-	LastName    string `bson:"last_name,omitempty" json:"last_name,omitempty"`
+	FirstName      string             `bson:"first_name,omitempty" json:"first_name,omitempty"`
+	MiddleNames    string             `bson:"middle_names,omitempty" json:"middle_names,omitempty"`
+	LastName       string             `bson:"last_name,omitempty" json:"last_name,omitempty"`
+	Specialization string             `bson:"specialization,omitempty" json:"specialization,omitempty"`
+	ActiveChats    int                `bson:"-" json:"active_chats"`
 }

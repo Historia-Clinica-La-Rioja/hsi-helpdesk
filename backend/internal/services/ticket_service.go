@@ -60,8 +60,9 @@ type TicketService interface {
 	UpdateTicket(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID, req *models.APITicket) (*models.APITicket, error)
 	AddMessage(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID, text string) (*models.APIMessage, error)
 	UpdateTicketStatus(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID, newStatus string) (*models.APITicket, error)
-	AssignTicket(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID, agentObjectID primitive.ObjectID) (*models.APITicket, error)
+	AssignTicket(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID, agentObjectID primitive.ObjectID, reason string) (*models.APITicket, error)
 	GetAgents() ([]models.User, error)
+	GetTags() ([]models.Tag, error)
 }
 
 type ticketService struct {
@@ -158,6 +159,18 @@ func (s *ticketService) CreateTicket(createdBy primitive.ObjectID, req *models.A
 	req.UpdatedAt = dbTicket.UpdatedAt
 	req.EditCount = dbTicket.EditCount
 
+	// Resolve tags for the returned struct
+	tagMap := s.getTagMap()
+	resolvedTags := make([]string, 0, len(req.Tags))
+	for _, tagID := range req.Tags {
+		if name, exists := tagMap[tagID]; exists {
+			resolvedTags = append(resolvedTags, name)
+		} else {
+			resolvedTags = append(resolvedTags, tagID)
+		}
+	}
+	req.Tags = resolvedTags
+
 	return req, nil
 }
 
@@ -172,9 +185,10 @@ func (s *ticketService) GetTickets(userObjectID primitive.ObjectID, role string)
 		return nil, err
 	}
 
+	tagMap := s.getTagMap()
 	apiTickets := make([]models.APITicket, 0, len(dbTickets))
 	for _, dbT := range dbTickets {
-		apiT := s.populateAPITicket(&dbT)
+		apiT := s.populateAPITicket(&dbT, tagMap)
 		apiTickets = append(apiTickets, *apiT)
 	}
 
@@ -187,7 +201,7 @@ func (s *ticketService) GetTicket(ticketID primitive.ObjectID) (*models.APITicke
 		return nil, err
 	}
 
-	apiT := s.populateAPITicket(dbT)
+	apiT := s.populateAPITicket(dbT, s.getTagMap())
 
 	// Fetch messages/comments
 	dbMsgs, err := s.ticketRepo.GetMessagesByTicketID(ticketID)
@@ -286,7 +300,7 @@ func (s *ticketService) UpdateTicket(userObjectID primitive.ObjectID, role strin
 	}
 	_ = s.ticketRepo.InsertAuditLog(audit)
 
-	return s.populateAPITicket(dbT), nil
+	return s.populateAPITicket(dbT, s.getTagMap()), nil
 }
 
 func (s *ticketService) AddMessage(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID, text string) (*models.APIMessage, error) {
@@ -469,10 +483,10 @@ func (s *ticketService) UpdateTicketStatus(userObjectID primitive.ObjectID, role
 	}
 	_ = s.ticketRepo.InsertAuditLog(audit)
 
-	return s.populateAPITicket(dbT), nil
+	return s.populateAPITicket(dbT, s.getTagMap()), nil
 }
 
-func (s *ticketService) AssignTicket(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID, agentObjectID primitive.ObjectID) (*models.APITicket, error) {
+func (s *ticketService) AssignTicket(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID, agentObjectID primitive.ObjectID, reason string) (*models.APITicket, error) {
 	if strings.ToLower(role) == "user" {
 		return nil, errors.New("solo el personal de soporte puede reasignar tickets")
 	}
@@ -519,24 +533,85 @@ func (s *ticketService) AssignTicket(userObjectID primitive.ObjectID, role strin
 		agentName = agent.Username
 	}
 
+	desc := fmt.Sprintf("Agente %s reasignó el ticket a %s", fullName, agentName)
+	if reason != "" {
+		desc = fmt.Sprintf("Agente %s reasignó el ticket a %s. Motivo: %s", fullName, agentName, reason)
+	}
+
 	audit := &models.AuditLog{
 		ID:          primitive.NewObjectID(),
 		TicketID:    dbT.ID,
 		UserID:      userObjectID,
 		Type:        "MESSAGE",
-		Description: fmt.Sprintf("Agente %s reasignó el ticket a %s", fullName, agentName),
+		Description: desc,
 		InsertedAt:  time.Now(),
 	}
 	_ = s.ticketRepo.InsertAuditLog(audit)
 
-	return s.populateAPITicket(dbT), nil
+	return s.populateAPITicket(dbT, s.getTagMap()), nil
 }
 
 func (s *ticketService) GetAgents() ([]models.User, error) {
-	return s.ticketRepo.GetAgents()
+	agents, err := s.ticketRepo.GetAgents()
+	if err != nil {
+		return nil, err
+	}
+
+	// Fetch tags from the database to map as specializations
+	tags, err := s.ticketRepo.GetTags()
+	tagNames := []string{}
+	if err == nil && len(tags) > 0 {
+		for _, tag := range tags {
+			tagNames = append(tagNames, tag.Name)
+		}
+	} else {
+		// Fallback specializations if tags collection is empty or failed
+		tagNames = []string{
+			"Acceso",
+			"Autenticación",
+			"Historia clínica",
+			"Odontología",
+			"Snomed CT",
+			"Administración",
+			"Facturacion",
+			"Turnos",
+		}
+	}
+
+	for i := range agents {
+		// Count active chats
+		count, err := s.ticketRepo.CountActiveTicketsByAgent(agents[i].ID)
+		if err == nil {
+			agents[i].ActiveChats = count
+		}
+
+		// Fallback Specialization if not set in DB
+		if agents[i].Specialization == "" {
+			// Distribute specializations consistently based on agent ID
+			tagIndex := int(agents[i].ID[11]) % len(tagNames)
+			agents[i].Specialization = tagNames[tagIndex]
+		}
+	}
+
+	return agents, nil
 }
 
-func (s *ticketService) populateAPITicket(dbT *models.DBTicket) *models.APITicket {
+func (s *ticketService) GetTags() ([]models.Tag, error) {
+	return s.ticketRepo.GetTags()
+}
+
+func (s *ticketService) getTagMap() map[string]string {
+	tagMap := make(map[string]string)
+	tags, err := s.ticketRepo.GetTags()
+	if err == nil {
+		for _, t := range tags {
+			tagMap[t.ID.Hex()] = t.Name
+		}
+	}
+	return tagMap
+}
+
+func (s *ticketService) populateAPITicket(dbT *models.DBTicket, tagMap map[string]string) *models.APITicket {
 	apiT := &models.APITicket{
 		ID:          dbT.ID.Hex(),
 		Title:       dbT.Title,
@@ -554,6 +629,17 @@ func (s *ticketService) populateAPITicket(dbT *models.DBTicket) *models.APITicke
 		ResolvedAt:  dbT.ResolvedAt,
 		ReopenedAt:  dbT.ReopenedAt,
 	}
+
+	// Resolve tag IDs to tag names
+	resolvedTags := make([]string, 0, len(dbT.Tags))
+	for _, tagID := range dbT.Tags {
+		if name, exists := tagMap[tagID]; exists {
+			resolvedTags = append(resolvedTags, name)
+		} else {
+			resolvedTags = append(resolvedTags, tagID)
+		}
+	}
+	apiT.Tags = resolvedTags
 
 	if apiT.Tags == nil {
 		apiT.Tags = []string{}
