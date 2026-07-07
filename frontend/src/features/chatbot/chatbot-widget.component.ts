@@ -750,7 +750,7 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
         console.error("Error leyendo historial", e);
       }
     }
-    // Si no hay nada guardado, devolvemos el saludo original
+
     return [
       {
         id: 'msg_1',
