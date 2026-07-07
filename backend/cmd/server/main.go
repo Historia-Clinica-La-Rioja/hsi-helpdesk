@@ -36,7 +36,6 @@ func main() {
 	// Inicialización de Prioridades
 	priorityRepo := repositories.NewPriorityRepository(db)
 	priorityHandler := handlers.NewPriorityHandler(priorityRepo)
-	// 👇 NUEVO: Inicialización de FAQs (Faltaba esto para que no dé error)
 	faqRepo := repositories.NewFaqRepository(db)
 	faqHandler := handlers.NewFaqHandler(faqRepo)
 

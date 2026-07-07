@@ -311,6 +311,7 @@ func (h *TicketHandler) UpdateTicketStatus(c *gin.Context) {
 // AssignTicketRequest represents the reassignment request body
 type AssignTicketRequest struct {
 	AssignedTo string `json:"assigned_to" binding:"required"`
+	Reason     string `json:"reason"`
 }
 
 // PUT /api/tickets/:id/assign
@@ -360,7 +361,7 @@ func (h *TicketHandler) AssignTicket(c *gin.Context) {
 		return
 	}
 
-	updated, err := h.ticketService.AssignTicket(userObjID, role, ticketObjID, agentObjID)
+	updated, err := h.ticketService.AssignTicket(userObjID, role, ticketObjID, agentObjID, req.Reason)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -378,5 +379,15 @@ func (h *TicketHandler) GetAgents(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, agents)
+}
+
+// GET /api/tags
+func (h *TicketHandler) GetTags(c *gin.Context) {
+	tags, err := h.ticketService.GetTags()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al obtener etiquetas: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, tags)
 }
 
