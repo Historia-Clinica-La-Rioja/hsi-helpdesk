@@ -150,6 +150,11 @@ export interface Priority {
                       </mat-chip-option>
                     }
                   </mat-chip-listbox>
+                  @if (selectedTags().length === 0) {
+                    <span class="error-text" style="display: block; margin-top: 4px;">Debes seleccionar al menos 1 etiqueta</span>
+                  } @else if (selectedTags().length > 5) {
+                    <span class="error-text" style="display: block; margin-top: 4px;">Máximo 5 etiquetas permitidas</span>
+                  }
                 </div>
               </div>
             </div>
@@ -199,7 +204,7 @@ export interface Priority {
               <button 
                 type="submit" 
                 class="send-btn"
-                [disabled]="isSubmitting() || ticketForm.invalid"
+                [disabled]="isSubmitting() || ticketForm.invalid || selectedTags().length < 1 || selectedTags().length > 5"
               >
                 @if (isSubmitting()) {
                   Cargando...
@@ -2909,6 +2914,7 @@ export class TicketsTabComponent implements OnInit {
   onSubmit(event: Event): void {
     event.preventDefault();
     if (this.ticketForm.invalid) return;
+    if (this.selectedTags().length < 1 || this.selectedTags().length > 5) return;
 
     this.isSubmitting.set(true);
     const formVals = this.ticketForm.value;

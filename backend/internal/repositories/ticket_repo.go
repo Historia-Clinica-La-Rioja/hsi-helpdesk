@@ -29,8 +29,10 @@ type TicketRepository interface {
 	GetMessagesByTicketID(ticketID primitive.ObjectID) ([]models.DBMessage, error)
 	InsertAuditLog(log *models.AuditLog) error
 
-	GetTags() ([]models.Tag, error)
-	CountActiveTicketsByAgent(agentID primitive.ObjectID) (int, error)
+	FindTagByName(name string) (*models.DBTag, error)
+	FindTagByID(id primitive.ObjectID) (*models.DBTag, error)
+	FindOrCreateTagByName(name string) (*models.DBTag, error)
+	GetAllTags() ([]models.DBTag, error)
 }
 
 type ticketRepository struct {
@@ -256,8 +258,54 @@ func (r *ticketRepository) FindPriorityByID(id primitive.ObjectID) (*models.Prio
 	return &priority, nil
 }
 
-func (r *ticketRepository) GetTags() ([]models.Tag, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func (r *ticketRepository) FindTagByName(name string) (*models.DBTag, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var tag models.DBTag
+	filter := bson.M{"name": bson.M{"$regex": "^" + name + "$", "$options": "i"}}
+	err := r.tagsCol.FindOne(ctx, filter).Decode(&tag)
+	if err != nil {
+		return nil, err
+	}
+	return &tag, nil
+}
+
+func (r *ticketRepository) FindTagByID(id primitive.ObjectID) (*models.DBTag, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var tag models.DBTag
+	err := r.tagsCol.FindOne(ctx, bson.M{"_id": id}).Decode(&tag)
+	if err != nil {
+		return nil, err
+	}
+	return &tag, nil
+}
+
+func (r *ticketRepository) FindOrCreateTagByName(name string) (*models.DBTag, error) {
+	tag, err := r.FindTagByName(name)
+	if err == nil {
+		return tag, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	newTag := models.DBTag{
+		ID:   primitive.NewObjectID(),
+		Name: name,
+	}
+
+	_, err = r.tagsCol.InsertOne(ctx, &newTag)
+	if err != nil {
+		return nil, err
+	}
+	return &newTag, nil
+}
+
+func (r *ticketRepository) GetAllTags() ([]models.DBTag, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	cursor, err := r.tagsCol.Find(ctx, bson.M{})
@@ -266,30 +314,10 @@ func (r *ticketRepository) GetTags() ([]models.Tag, error) {
 	}
 	defer cursor.Close(ctx)
 
-	var tags []models.Tag
+	var tags []models.DBTag
 	if err := cursor.All(ctx, &tags); err != nil {
 		return nil, err
 	}
 	return tags, nil
 }
 
-func (r *ticketRepository) CountActiveTicketsByAgent(agentID primitive.ObjectID) (int, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// Active states: en_progreso (6a20234c2660243a1e9df8a4), reabierto (6a216e36c50ba547a89df8a3), transferido (6a20234c2660243a1e9df8a5)
-	epID, _ := primitive.ObjectIDFromHex("6a20234c2660243a1e9df8a4")
-	trID, _ := primitive.ObjectIDFromHex("6a20234c2660243a1e9df8a5")
-	raID, _ := primitive.ObjectIDFromHex("6a216e36c50ba547a89df8a3")
-
-	filter := bson.M{
-		"assigned_to": agentID,
-		"state_id":    bson.M{"$in": []primitive.ObjectID{epID, trID, raID}},
-	}
-
-	count, err := r.ticketsCol.CountDocuments(ctx, filter)
-	if err != nil {
-		return 0, err
-	}
-	return int(count), nil
-}

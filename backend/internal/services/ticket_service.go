@@ -98,6 +98,20 @@ func (s *ticketService) CreateTicket(createdBy primitive.ObjectID, req *models.A
 	// State ID defaults to "Abierto"
 	stateID := StateNameToID["abierto"]
 
+	// Validate tags length constraint
+	if len(req.Tags) < 1 || len(req.Tags) > 5 {
+		return nil, errors.New("el ticket debe tener entre 1 y 5 etiquetas")
+	}
+
+	// Resolve tag names to ObjectIDs
+	tagIDs := make([]primitive.ObjectID, 0, len(req.Tags))
+	for _, tagName := range req.Tags {
+		tag, err := s.ticketRepo.FindOrCreateTagByName(tagName)
+		if err == nil {
+			tagIDs = append(tagIDs, tag.ID)
+		}
+	}
+
 	// Create DB Model
 	dbTicket := &models.DBTicket{
 		ID:          primitive.NewObjectID(),
@@ -107,7 +121,7 @@ func (s *ticketService) CreateTicket(createdBy primitive.ObjectID, req *models.A
 		AssignedTo:  nil, // explicitly initialize to nil for BSON null serialization
 		Institution: inst.ID,
 		Attachments: req.Attachments,
-		Tags:        req.Tags,
+		Tags:        tagIDs,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 		PriorityID:  priorityID,
@@ -119,7 +133,7 @@ func (s *ticketService) CreateTicket(createdBy primitive.ObjectID, req *models.A
 		dbTicket.Attachments = []string{}
 	}
 	if dbTicket.Tags == nil {
-		dbTicket.Tags = []string{}
+		dbTicket.Tags = []primitive.ObjectID{}
 	}
 
 	err = s.ticketRepo.Create(dbTicket)
@@ -187,6 +201,7 @@ func (s *ticketService) GetTickets(userObjectID primitive.ObjectID, role string)
 
 	tagMap := s.getTagMap()
 	apiTickets := make([]models.APITicket, 0, len(dbTickets))
+	tagMap := s.getTagMap()
 	for _, dbT := range dbTickets {
 		apiT := s.populateAPITicket(&dbT, tagMap)
 		apiTickets = append(apiTickets, *apiT)
@@ -201,7 +216,8 @@ func (s *ticketService) GetTicket(ticketID primitive.ObjectID) (*models.APITicke
 		return nil, err
 	}
 
-	apiT := s.populateAPITicket(dbT, s.getTagMap())
+	tagMap := s.getTagMap()
+	apiT := s.populateAPITicket(dbT, tagMap)
 
 	// Fetch messages/comments
 	dbMsgs, err := s.ticketRepo.GetMessagesByTicketID(ticketID)
@@ -300,7 +316,8 @@ func (s *ticketService) UpdateTicket(userObjectID primitive.ObjectID, role strin
 	}
 	_ = s.ticketRepo.InsertAuditLog(audit)
 
-	return s.populateAPITicket(dbT, s.getTagMap()), nil
+	tagMap := s.getTagMap()
+	return s.populateAPITicket(dbT, tagMap), nil
 }
 
 func (s *ticketService) AddMessage(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID, text string) (*models.APIMessage, error) {
@@ -483,7 +500,8 @@ func (s *ticketService) UpdateTicketStatus(userObjectID primitive.ObjectID, role
 	}
 	_ = s.ticketRepo.InsertAuditLog(audit)
 
-	return s.populateAPITicket(dbT, s.getTagMap()), nil
+	tagMap := s.getTagMap()
+	return s.populateAPITicket(dbT, tagMap), nil
 }
 
 func (s *ticketService) AssignTicket(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID, agentObjectID primitive.ObjectID, reason string) (*models.APITicket, error) {
@@ -548,7 +566,8 @@ func (s *ticketService) AssignTicket(userObjectID primitive.ObjectID, role strin
 	}
 	_ = s.ticketRepo.InsertAuditLog(audit)
 
-	return s.populateAPITicket(dbT, s.getTagMap()), nil
+	tagMap := s.getTagMap()
+	return s.populateAPITicket(dbT, tagMap), nil
 }
 
 func (s *ticketService) GetAgents() ([]models.User, error) {
@@ -596,22 +615,18 @@ func (s *ticketService) GetAgents() ([]models.User, error) {
 	return agents, nil
 }
 
-func (s *ticketService) GetTags() ([]models.Tag, error) {
-	return s.ticketRepo.GetTags()
-}
-
-func (s *ticketService) getTagMap() map[string]string {
-	tagMap := make(map[string]string)
-	tags, err := s.ticketRepo.GetTags()
+func (s *ticketService) getTagMap() map[primitive.ObjectID]string {
+	tagMap := make(map[primitive.ObjectID]string)
+	tags, err := s.ticketRepo.GetAllTags()
 	if err == nil {
 		for _, t := range tags {
-			tagMap[t.ID.Hex()] = t.Name
+			tagMap[t.ID] = t.Name
 		}
 	}
 	return tagMap
 }
 
-func (s *ticketService) populateAPITicket(dbT *models.DBTicket, tagMap map[string]string) *models.APITicket {
+func (s *ticketService) populateAPITicket(dbT *models.DBTicket, tagMap map[primitive.ObjectID]string) *models.APITicket {
 	apiT := &models.APITicket{
 		ID:          dbT.ID.Hex(),
 		Title:       dbT.Title,
@@ -620,7 +635,7 @@ func (s *ticketService) populateAPITicket(dbT *models.DBTicket, tagMap map[strin
 		Institution: dbT.Institution.Hex(),
 		Priority:    "Media",
 		Status:      "abierto",
-		Tags:        dbT.Tags,
+		Tags:        []string{},
 		Attachments: dbT.Attachments,
 		CreatedAt:   dbT.CreatedAt,
 		UpdatedAt:   dbT.UpdatedAt,
@@ -630,16 +645,15 @@ func (s *ticketService) populateAPITicket(dbT *models.DBTicket, tagMap map[strin
 		ReopenedAt:  dbT.ReopenedAt,
 	}
 
-	// Resolve tag IDs to tag names
-	resolvedTags := make([]string, 0, len(dbT.Tags))
+	tagsList := make([]string, 0, len(dbT.Tags))
 	for _, tagID := range dbT.Tags {
-		if name, exists := tagMap[tagID]; exists {
-			resolvedTags = append(resolvedTags, name)
+		if name, ok := tagMap[tagID]; ok {
+			tagsList = append(tagsList, name)
 		} else {
-			resolvedTags = append(resolvedTags, tagID)
+			tagsList = append(tagsList, tagID.Hex())
 		}
 	}
-	apiT.Tags = resolvedTags
+	apiT.Tags = tagsList
 
 	if apiT.Tags == nil {
 		apiT.Tags = []string{}
