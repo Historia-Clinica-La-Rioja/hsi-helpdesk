@@ -2796,7 +2796,7 @@ export class TicketsTabComponent implements OnInit {
     // Armamos el encabezado con el token
     const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
 
-    this.http.get<Institution[]>('http://localhost:8083/api/institutions', { headers }).subscribe({
+    this.http.get<Institution[]>('/api/institutions', { headers }).subscribe({
       next: (data) => {
         this.institutions.set(data);
       },
@@ -2810,7 +2810,7 @@ export class TicketsTabComponent implements OnInit {
     const token = localStorage.getItem('hsi_token');
     const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
 
-    this.http.get<Priority[]>('http://localhost:8083/api/priorities', { headers }).subscribe({
+    this.http.get<Priority[]>('/api/priorities', { headers }).subscribe({
       next: (data) => {
         this.priorities.set(data);
       },

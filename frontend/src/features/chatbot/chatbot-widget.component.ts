@@ -824,7 +824,7 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
     // Armamos el encabezado con el token
     const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
 
-    this.http.get<Faq[]>('http://localhost:8083/api/faqs', { headers }).subscribe({
+    this.http.get<Faq[]>('/api/faqs', { headers }).subscribe({
       next: (data) => {
         this.faqs.set(data);
       },

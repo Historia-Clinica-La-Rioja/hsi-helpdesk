@@ -10,7 +10,7 @@ export class AuthService {
   private http = inject(HttpClient);
   private router = inject(Router);
 
-  private apiUrl = 'http://localhost:8083/api';
+  private apiUrl = '/api';
 
   currentUser = signal<any>(null);
   token = signal<string | null>(null);
