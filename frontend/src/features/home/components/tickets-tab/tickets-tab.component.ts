@@ -328,7 +328,7 @@ export interface Priority {
           
           <div class="separator"></div>
 
-          <div class="tickets-list">
+          <div class="tickets-list" [class.agent-list]="currentUserRole() !== 'user'">
             @if (ticketsList().length === 0) {
               <div class="empty-state">
                 <span class="material-icons">confirmation_number</span>
@@ -377,7 +377,7 @@ export interface Priority {
                         }
 
                         <!-- Nuevo Badge -->
-                        @if (currentUserRole() !== 'user' && !isTicketRead(ticket.id) && ticket.status !== 'resuelto' && ticket.status !== 'cerrado') {
+                        @if (currentUserRole() !== 'user' && isTicketNew(ticket)) {
                           <span class="new-ticket-badge">Nuevo</span>
                         }
 
@@ -474,6 +474,11 @@ export interface Priority {
 
           @if (selectedTicket(); as ticket) {
             <div class="detail-body">
+              <div class="detail-title-section" style="margin-bottom: 12px;">
+                <h2 style="font-size: 22px; font-weight: 700; color: var(--color-text-primary); margin: 0; line-height: 1.3;">
+                  {{ ticket.title }}
+                </h2>
+              </div>
               @if (!isEditing()) {
                 <!-- Display Mode -->
                 <div class="detail-info-row">
@@ -539,6 +544,16 @@ export interface Priority {
                   <h4>Descripción del incidente</h4>
                   <p class="description-text">{{ ticket.description }}</p>
                 </div>
+
+                @if (ticket.transfer_reason) {
+                  <div class="transfer-reason-card" style="background: #FFF9C4; border: 1px solid #FFF59D; padding: 15px; border-radius: 8px; color: #5D4037; font-family: var(--font-body); font-size: 13px; display: flex; flex-direction: column; gap: 6px; margin-top: 16px; margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 6px; font-weight: 700;">
+                      <span class="material-icons" style="font-size: 18px; color: #F57F17; vertical-align: middle;">swap_horiz</span>
+                      <span>Motivo de la transferencia</span>
+                    </div>
+                    <p style="margin: 0; line-height: 1.5; font-style: italic;">"{{ ticket.transfer_reason }}"</p>
+                  </div>
+                }
 
                 @if (currentUserRole() !== 'user') {
                   @if (!ticket.assigned_to || ticket.assigned_to === currentUserId()) {
@@ -1147,9 +1162,13 @@ export interface Priority {
       display: flex;
       flex-direction: column;
       gap: 16px;
-      max-height: 420px;
+      max-height: calc(100vh - 310px);
       overflow-y: auto;
       padding-right: 4px;
+    }
+
+    .tickets-list.agent-list {
+      max-height: calc(100vh - 480px);
     }
 
     .ticket-item {
@@ -2646,7 +2665,7 @@ export class TicketsTabComponent implements OnInit {
     // Sort: Nuevo at the top, then abierto -> reabierto -> en_progreso/transferido -> resuelto/cerrado
     return [...filtered].sort((a, b) => {
       const getStatusScore = (t: Ticket) => {
-        const isNew = role !== 'user' && !this.isTicketRead(t.id) && t.status !== 'resuelto' && t.status !== 'cerrado';
+        const isNew = role !== 'user' && this.isTicketNew(t);
         if (isNew) return 1;
 
         switch (t.status) {
@@ -2682,6 +2701,13 @@ export class TicketsTabComponent implements OnInit {
     } catch (e) {
       console.error('Error reading read_ticket_ids:', e);
     }
+  }
+
+  isTicketNew(ticket: Ticket): boolean {
+    if (ticket.status !== 'abierto') return false;
+    if (ticket.assigned_to) return false;
+    const hasAgentReply = ticket.messages?.some(m => m.role === 'agent') || false;
+    return !hasAgentReply;
   }
 
   isTicketRead(ticketId: string): boolean {

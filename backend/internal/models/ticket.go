@@ -24,6 +24,7 @@ type DBTicket struct {
 	ClosedAt    *time.Time          `bson:"closed_at,omitempty" json:"closed_at,omitempty"`
 	ResolvedAt  *time.Time          `bson:"resolved_at,omitempty" json:"resolved_at,omitempty"`
 	ReopenedAt  *time.Time          `bson:"reopened_at,omitempty" json:"reopened_at,omitempty"`
+	TransferReason string           `bson:"transfer_reason,omitempty" json:"transfer_reason,omitempty"`
 }
 
 // DBMessage represents the schema of the Messages collection in MongoDB
@@ -80,6 +81,7 @@ type APITicket struct {
 	ClosedAt    *time.Time   `json:"closed_at,omitempty"`
 	ResolvedAt  *time.Time   `json:"resolved_at,omitempty"`
 	ReopenedAt  *time.Time   `json:"reopened_at,omitempty"`
+	TransferReason string    `json:"transfer_reason,omitempty"`
 }
 
 // APIMessage is the comment message returned to the frontend

@@ -251,16 +251,10 @@ func (s *ticketService) GetTicket(ticketID primitive.ObjectID) (*models.APITicke
 }
 
 func (s *ticketService) UpdateTicket(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID, req *models.APITicket) (*models.APITicket, error) {
-	// Only user can edit, not agent
-	if strings.ToLower(role) != "user" {
-		return nil, errors.New("los agentes no pueden editar los tickets")
-	}
-
 	dbT, err := s.ticketRepo.GetTicketByID(ticketID)
 	if err != nil {
 		return nil, err
 	}
-
 	// Security: check if ticket belongs to the user
 	if dbT.CreatedBy != userObjectID {
 		return nil, errors.New("no tenés permisos para editar este ticket")
@@ -536,6 +530,7 @@ func (s *ticketService) AssignTicket(userObjectID primitive.ObjectID, role strin
 
 	dbT.AssignedTo = &agentObjectID
 	dbT.StateID = StateNameToID["transferido"]
+	dbT.TransferReason = reason
 	dbT.UpdatedAt = time.Now()
 
 	err = s.ticketRepo.Update(dbT)
@@ -588,10 +583,18 @@ func (s *ticketService) GetAgents() ([]models.User, error) {
 	tagNames := []string{}
 	if err == nil && len(tags) > 0 {
 		for _, tag := range tags {
+			// Skip tags whose Name is a hex ObjectID
+			if len(tag.Name) == 24 {
+				if _, err := primitive.ObjectIDFromHex(tag.Name); err == nil {
+					continue
+				}
+			}
 			tagNames = append(tagNames, tag.Name)
 		}
-	} else {
-		// Fallback specializations if tags collection is empty or failed
+	}
+
+	// Fallback to defaults if tagNames is empty
+	if len(tagNames) == 0 {
 		tagNames = []string{
 			"Acceso",
 			"Autenticación",
@@ -617,6 +620,9 @@ func (s *ticketService) GetAgents() ([]models.User, error) {
 			tagIndex := int(agents[i].ID[11]) % len(tagNames)
 			agents[i].Specialization = tagNames[tagIndex]
 		}
+
+		// Resolve specialization ID to tag name if it is a hex ID (or nested)
+		agents[i].Specialization = resolveSpecialization(agents[i].Specialization, tags)
 	}
 
 	return agents, nil
@@ -674,8 +680,9 @@ func (s *ticketService) populateAPITicket(dbT *models.DBTicket, tagMap map[primi
 		UpdatedAt:   dbT.UpdatedAt,
 		EditCount:   dbT.EditCount,
 		ClosedAt:    dbT.ClosedAt,
-		ResolvedAt:  dbT.ResolvedAt,
-		ReopenedAt:  dbT.ReopenedAt,
+		ResolvedAt:     dbT.ResolvedAt,
+		ReopenedAt:     dbT.ReopenedAt,
+		TransferReason: dbT.TransferReason,
 	}
 
 	tagsList := make([]string, 0, len(dbT.Tags))
@@ -734,4 +741,29 @@ func (s *ticketService) populateAPITicket(dbT *models.DBTicket, tagMap map[primi
 	}
 
 	return apiT
+}
+
+func resolveSpecialization(spec string, tags []models.DBTag) string {
+	current := spec
+	for depth := 0; depth < 5; depth++ {
+		if current == "" {
+			break
+		}
+		if specObjID, err := primitive.ObjectIDFromHex(current); err == nil {
+			found := false
+			for _, tag := range tags {
+				if tag.ID == specObjID {
+					current = tag.Name
+					found = true
+					break
+				}
+			}
+			if !found {
+				break
+			}
+		} else {
+			break
+		}
+	}
+	return current
 }
