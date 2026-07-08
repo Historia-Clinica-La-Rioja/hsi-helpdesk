@@ -34,6 +34,8 @@ type TicketRepository interface {
 	FindTagByID(id primitive.ObjectID) (*models.DBTag, error)
 	FindOrCreateTagByName(name string) (*models.DBTag, error)
 	GetAllTags() ([]models.DBTag, error)
+	FindUsersByIDs(ids []primitive.ObjectID) ([]models.User, error)
+	FindInstitutionsByIDs(ids []primitive.ObjectID) ([]models.DBInstitution, error)
 }
 
 type ticketRepository struct {
@@ -321,6 +323,49 @@ func (r *ticketRepository) GetAllTags() ([]models.DBTag, error) {
 		return nil, err
 	}
 	return tags, nil
+}
+
+func (r *ticketRepository) FindUsersByIDs(ids []primitive.ObjectID) ([]models.User, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if len(ids) == 0 {
+		return []models.User{}, nil
+	}
+
+	cursor, err := r.usersCol.Find(ctx, bson.M{"_id": bson.M{"$in": ids}})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var users []models.User
+	if err := cursor.All(ctx, &users); err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
+func (r *ticketRepository) FindInstitutionsByIDs(ids []primitive.ObjectID) ([]models.DBInstitution, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if len(ids) == 0 {
+		return []models.DBInstitution{}, nil
+	}
+
+	cursor, err := r.institutionsCol.Find(ctx, bson.M{"_id": bson.M{"$in": ids}})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var insts []models.DBInstitution
+	if err := cursor.All(ctx, &insts); err != nil {
+		return nil, err
+	}
+	return insts, nil
+
 }
 
 func (r *ticketRepository) CountActiveTicketsByAgent(agentID primitive.ObjectID) (int, error) {

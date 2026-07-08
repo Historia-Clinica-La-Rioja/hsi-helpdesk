@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
+	"sync"
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/models"
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/repositories"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -169,7 +169,10 @@ func (s *ticketService) CreateTicket(createdBy primitive.ObjectID, req *models.A
 		Description: auditDesc,
 		InsertedAt:  time.Now(),
 	}
-	_ = s.ticketRepo.InsertAuditLog(audit)
+	// OPTIMIZACIÓN: Inserción asíncrona de auditoría
+	go func(a *models.AuditLog) {
+		_ = s.ticketRepo.InsertAuditLog(a)
+	}(audit)
 
 	// Populate response APITicket
 	req.ID = dbTicket.ID.Hex()
@@ -207,9 +210,68 @@ func (s *ticketService) GetTickets(userObjectID primitive.ObjectID, role string)
 	}
 
 	tagMap := s.getTagMap()
+	userCache := make(map[primitive.ObjectID]string)
+	instCache := make(map[primitive.ObjectID]string)
+
+	// 1. Recolectar todos los IDs únicos (Usuarios e Instituciones) de la lista de tickets
+	userIDsMap := make(map[primitive.ObjectID]bool)
+	instIDsMap := make(map[primitive.ObjectID]bool)
+
+	for _, t := range dbTickets {
+		userIDsMap[t.CreatedBy] = true
+		instIDsMap[t.Institution] = true
+		// Si el ticket está asignado, también queremos el nombre del agente
+		if t.AssignedTo != nil {
+			userIDsMap[*t.AssignedTo] = true
+		}
+	}
+
+	var userIDs []primitive.ObjectID
+	for id := range userIDsMap {
+		userIDs = append(userIDs, id)
+	}
+
+	var instIDs []primitive.ObjectID
+	for id := range instIDsMap {
+		instIDs = append(instIDs, id)
+	}
+
+	// 2. Viajamos a Estados Unidos (Atlas) EN PARALELO a buscar todos de un solo golpe
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		if len(userIDs) > 0 {
+			if users, err := s.ticketRepo.FindUsersByIDs(userIDs); err == nil {
+				for _, u := range users {
+					name := strings.TrimSpace(fmt.Sprintf("%s %s", u.FirstName, u.LastName))
+					if name == "" {
+						name = u.Username
+					}
+					userCache[u.ID] = name
+				}
+			}
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		if len(instIDs) > 0 {
+			if insts, err := s.ticketRepo.FindInstitutionsByIDs(instIDs); err == nil {
+				for _, inst := range insts {
+					instCache[inst.ID] = inst.Name
+				}
+			}
+		}
+	}()
+
+	wg.Wait() // Esperamos a que vuelva la información de ambos hilos
+
+	// 3. Ensamblamos la respuesta a la velocidad de la luz (0 peticiones extra a la BD)
 	apiTickets := make([]models.APITicket, 0, len(dbTickets))
 	for _, dbT := range dbTickets {
-		apiT := s.populateAPITicket(&dbT, tagMap)
+		apiT := s.populateAPITicket(&dbT, tagMap, userCache, instCache)
 		apiTickets = append(apiTickets, *apiT)
 	}
 
@@ -222,8 +284,12 @@ func (s *ticketService) GetTicket(ticketID primitive.ObjectID) (*models.APITicke
 		return nil, err
 	}
 
+	// OPTIMIZACIÓN: Cachés listos para reutilizar entre el ticket y sus mensajes
 	tagMap := s.getTagMap()
-	apiT := s.populateAPITicket(dbT, tagMap)
+	userCache := make(map[primitive.ObjectID]string)
+	instCache := make(map[primitive.ObjectID]string)
+	
+	apiT := s.populateAPITicket(dbT, tagMap, userCache, instCache)
 
 	// Fetch messages/comments
 	dbMsgs, err := s.ticketRepo.GetMessagesByTicketID(ticketID)
@@ -237,10 +303,19 @@ func (s *ticketService) GetTicket(ticketID primitive.ObjectID) (*models.APITicke
 				Content:   dbM.Text,
 				CreatedAt: dbM.SentAt,
 			}
-			// Resolve sender name if it's an ObjectID hex
+			// OPTIMIZACIÓN: Evitar pegarle a la DB por cada mensaje usando el userCache
 			if senderObjID, err := primitive.ObjectIDFromHex(dbM.SenderID); err == nil {
-				if user, err := s.ticketRepo.FindUserByID(senderObjID); err == nil {
-					apiM.SenderID = user.Username
+				if cachedName, ok := userCache[senderObjID]; ok {
+					apiM.SenderID = cachedName
+				} else {
+					if user, err := s.ticketRepo.FindUserByID(senderObjID); err == nil {
+						name := strings.TrimSpace(fmt.Sprintf("%s %s", user.FirstName, user.LastName))
+						if name == "" {
+							name = user.Username
+						}
+						userCache[senderObjID] = name
+						apiM.SenderID = name
+					}
 				}
 			}
 			apiT.Messages = append(apiT.Messages, apiM)
@@ -260,18 +335,15 @@ func (s *ticketService) UpdateTicket(userObjectID primitive.ObjectID, role strin
 		return nil, errors.New("no tenés permisos para editar este ticket")
 	}
 
-	// Check if ticket status is open (abierto)
 	currStatus := StateIDToName[dbT.StateID]
 	if currStatus != "abierto" {
 		return nil, errors.New("solo se pueden editar los tickets con estado abierto")
 	}
 
-	// Check edit count limit
 	if dbT.EditCount >= 1 {
 		return nil, errors.New("límite de 1 edición alcanzado")
 	}
 
-	// Map requested priority
 	var priorityID primitive.ObjectID
 	dbPrio, err := s.ticketRepo.FindPriorityByName(req.Priority)
 	if err == nil {
@@ -284,11 +356,9 @@ func (s *ticketService) UpdateTicket(userObjectID primitive.ObjectID, role strin
 		}
 	}
 
-	// Update fields
 	dbT.Body = req.Description
 	dbT.PriorityID = priorityID
 	dbT.EditCount++
-	dbT.UpdatedAt = time.Now()
 	dbT.UpdatedAt = time.Now()
 
 	err = s.ticketRepo.Update(dbT)
@@ -296,7 +366,6 @@ func (s *ticketService) UpdateTicket(userObjectID primitive.ObjectID, role strin
 		return nil, err
 	}
 
-	// Audit Log
 	user, err := s.ticketRepo.FindUserByID(userObjectID)
 	fullName := "Usuario HSI"
 	if err == nil && user != nil {
@@ -314,22 +383,20 @@ func (s *ticketService) UpdateTicket(userObjectID primitive.ObjectID, role strin
 		Description: fmt.Sprintf("Usuario %s editó el ticket", fullName),
 		InsertedAt:  time.Now(),
 	}
-	_ = s.ticketRepo.InsertAuditLog(audit)
+	// OPTIMIZACIÓN: Goroutine
+	go func(a *models.AuditLog) { _ = s.ticketRepo.InsertAuditLog(a) }(audit)
 
-	tagMap := s.getTagMap()
-	return s.populateAPITicket(dbT, tagMap), nil
+	return s.populateAPITicket(dbT, s.getTagMap(), make(map[primitive.ObjectID]string), make(map[primitive.ObjectID]string)), nil
 }
 
 func (s *ticketService) AddMessage(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID, text string) (*models.APIMessage, error) {
 	roleLower := strings.ToLower(role)
 
-	// Validate ticket exists
 	dbT, err := s.ticketRepo.GetTicketByID(ticketID)
 	if err != nil {
 		return nil, fmt.Errorf("ticket not found: %w", err)
 	}
 
-	// Fetch user details for audit logs
 	user, err := s.ticketRepo.FindUserByID(userObjectID)
 	fullName := "Usuario"
 	if err == nil && user != nil {
@@ -339,21 +406,17 @@ func (s *ticketService) AddMessage(userObjectID primitive.ObjectID, role string,
 		}
 	}
 
-	// Access Control: if ticket is assigned to an agent, only that agent can respond
 	if dbT.CreatedBy != userObjectID {
-	
 		if dbT.AssignedTo != nil && *dbT.AssignedTo != userObjectID {
 			return nil, errors.New("solo el agente asignado o el creador del ticket pueden responder")
 		}
 	}
 
-	// Dynamic State Transition Logic
 	status := StateIDToName[dbT.StateID]
 	stateChanged := false
 	var stateChangeAudit string
 
 	if roleLower == "agent" || roleLower == "owner" || roleLower == "admin" {
-		// Rule: if agent responds and ticket is abierto / unassigned, move to en_progreso and assign to agent
 		if status == "abierto" || dbT.AssignedTo == nil {
 			dbT.AssignedTo = &userObjectID
 			dbT.StateID = StateNameToID["en_progreso"]
@@ -361,14 +424,12 @@ func (s *ticketService) AddMessage(userObjectID primitive.ObjectID, role string,
 			stateChanged = true
 			stateChangeAudit = fmt.Sprintf("Agente %s tomó el ticket y comenzó a responder. Estado cambiado a En progreso.", fullName)
 		} else if status == "reabierto" {
-			// Rule: if agent responds to reabierto, change status to en_progreso
 			dbT.StateID = StateNameToID["en_progreso"]
 			dbT.UpdatedAt = time.Now()
 			stateChanged = true
 			stateChangeAudit = fmt.Sprintf("Agente %s respondió al ticket reabierto. Estado cambiado a En progreso.", fullName)
 		}
 	} else if roleLower == "user" {
-		// Rule: if user comments on resolved/closed ticket, move to reabierto
 		if status == "resuelto" || status == "cerrado" {
 			dbT.StateID = StateNameToID["reabierto"]
 			now := time.Now()
@@ -395,10 +456,10 @@ func (s *ticketService) AddMessage(userObjectID primitive.ObjectID, role string,
 			Description: stateChangeAudit,
 			InsertedAt:  time.Now(),
 		}
-		_ = s.ticketRepo.InsertAuditLog(auditState)
+		// OPTIMIZACIÓN: Ejecutar en segundo plano
+		go func(a *models.AuditLog) { _ = s.ticketRepo.InsertAuditLog(a) }(auditState)
 	}
 
-	// Create DBMessage
 	dbMsg := &models.DBMessage{
 		ID:          primitive.NewObjectID(),
 		TicketID:    ticketID,
@@ -428,9 +489,9 @@ func (s *ticketService) AddMessage(userObjectID primitive.ObjectID, role string,
 		Description: auditDesc,
 		InsertedAt:  time.Now(),
 	}
-	_ = s.ticketRepo.InsertAuditLog(audit)
+	// OPTIMIZACIÓN: Ejecutar en segundo plano para devolver la respuesta del chat rápido
+	go func(a *models.AuditLog) { _ = s.ticketRepo.InsertAuditLog(a) }(audit)
 
-	// Return APIMessage
 	apiMsg := &models.APIMessage{
 		ID:        dbMsg.ID.Hex(),
 		SenderID:  userObjectID.Hex(),
@@ -455,7 +516,6 @@ func (s *ticketService) UpdateTicketStatus(userObjectID primitive.ObjectID, role
 		return nil, err
 	}
 
-	// Access Control: if ticket is assigned to an agent, only that agent can change status
 	roleLower := strings.ToLower(role)
 	if roleLower == "agent" || roleLower == "owner" || roleLower == "admin" {
 		if dbT.AssignedTo != nil && *dbT.AssignedTo != userObjectID {
@@ -481,7 +541,6 @@ func (s *ticketService) UpdateTicketStatus(userObjectID primitive.ObjectID, role
 		return nil, err
 	}
 
-	// Log audit
 	user, err := s.ticketRepo.FindUserByID(userObjectID)
 	fullName := "Agente de Soporte"
 	if err == nil && user != nil {
@@ -499,10 +558,9 @@ func (s *ticketService) UpdateTicketStatus(userObjectID primitive.ObjectID, role
 		Description: fmt.Sprintf("Agente %s cambió el estado del ticket a %s", fullName, newStatus),
 		InsertedAt:  time.Now(),
 	}
-	_ = s.ticketRepo.InsertAuditLog(audit)
+	go func(a *models.AuditLog) { _ = s.ticketRepo.InsertAuditLog(a) }(audit)
 
-	tagMap := s.getTagMap()
-	return s.populateAPITicket(dbT, tagMap), nil
+	return s.populateAPITicket(dbT, s.getTagMap(), make(map[primitive.ObjectID]string), make(map[primitive.ObjectID]string)), nil
 }
 
 func (s *ticketService) AssignTicket(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID, agentObjectID primitive.ObjectID, reason string) (*models.APITicket, error) {
@@ -515,7 +573,6 @@ func (s *ticketService) AssignTicket(userObjectID primitive.ObjectID, role strin
 		return nil, err
 	}
 
-	// Access Control: if ticket is assigned to an agent, only that agent can reassign it
 	roleLower := strings.ToLower(role)
 	if roleLower == "agent" || roleLower == "owner" || roleLower == "admin" {
 		if dbT.AssignedTo != nil && *dbT.AssignedTo != userObjectID {
@@ -538,7 +595,6 @@ func (s *ticketService) AssignTicket(userObjectID primitive.ObjectID, role strin
 		return nil, err
 	}
 
-	// Log audit
 	user, err := s.ticketRepo.FindUserByID(userObjectID)
 	fullName := "Agente de Soporte"
 	if err == nil && user != nil {
@@ -566,10 +622,9 @@ func (s *ticketService) AssignTicket(userObjectID primitive.ObjectID, role strin
 		Description: desc,
 		InsertedAt:  time.Now(),
 	}
-	_ = s.ticketRepo.InsertAuditLog(audit)
+	go func(a *models.AuditLog) { _ = s.ticketRepo.InsertAuditLog(a) }(audit)
 
-	tagMap := s.getTagMap()
-	return s.populateAPITicket(dbT, tagMap), nil
+	return s.populateAPITicket(dbT, s.getTagMap(), make(map[primitive.ObjectID]string), make(map[primitive.ObjectID]string)), nil
 }
 
 func (s *ticketService) GetAgents() ([]models.User, error) {
@@ -578,7 +633,6 @@ func (s *ticketService) GetAgents() ([]models.User, error) {
 		return nil, err
 	}
 
-	// Fetch tags from the database to map as specializations
 	tags, err := s.ticketRepo.GetAllTags()
 	tagNames := []string{}
 	if err == nil && len(tags) > 0 {
@@ -596,27 +650,19 @@ func (s *ticketService) GetAgents() ([]models.User, error) {
 	// Fallback to defaults if tagNames is empty
 	if len(tagNames) == 0 {
 		tagNames = []string{
-			"Acceso",
-			"Autenticación",
-			"Historia clínica",
-			"Odontología",
-			"Snomed CT",
-			"Administración",
-			"Facturacion",
-			"Turnos",
+			"Acceso", "Autenticación", "Historia clínica",
+			"Odontología", "Snomed CT", "Administración",
+			"Facturacion", "Turnos",
 		}
 	}
 
 	for i := range agents {
-		// Count active chats
 		count, err := s.ticketRepo.CountActiveTicketsByAgent(agents[i].ID)
 		if err == nil {
 			agents[i].ActiveChats = count
 		}
 
-		// Fallback Specialization if not set in DB
 		if agents[i].Specialization == "" {
-			// Distribute specializations consistently based on agent ID
 			tagIndex := int(agents[i].ID[11]) % len(tagNames)
 			agents[i].Specialization = tagNames[tagIndex]
 		}
@@ -665,12 +711,13 @@ func (s *ticketService) getTagMap() map[primitive.ObjectID]string {
 	return tagMap
 }
 
-func (s *ticketService) populateAPITicket(dbT *models.DBTicket, tagMap map[primitive.ObjectID]string) *models.APITicket {
+// OPTIMIZACIÓN: Se añaden diccionarios (caché) como parámetros para no castigar a MongoDB
+func (s *ticketService) populateAPITicket(dbT *models.DBTicket, tagMap map[primitive.ObjectID]string, userCache map[primitive.ObjectID]string, instCache map[primitive.ObjectID]string) *models.APITicket {
 	apiT := &models.APITicket{
 		ID:          dbT.ID.Hex(),
 		Title:       dbT.Title,
 		Description: dbT.Body,
-		UserID:      "Usuario General", // Readable fallback if lookup fails
+		UserID:      "Usuario General",
 		Institution: dbT.Institution.Hex(),
 		Priority:    "Media",
 		Status:      "abierto",
@@ -706,34 +753,44 @@ func (s *ticketService) populateAPITicket(dbT *models.DBTicket, tagMap map[primi
 		apiT.AssignedTo = dbT.AssignedTo.Hex()
 	}
 
-	// Resolve created_by user
-	if user, err := s.ticketRepo.FindUserByID(dbT.CreatedBy); err == nil {
-		fullName := strings.TrimSpace(fmt.Sprintf("%s %s", user.FirstName, user.LastName))
-		if fullName != "" {
-			apiT.UserID = fullName
+	// OPTIMIZACIÓN: Resolver Usuario con Caché
+	if cachedName, ok := userCache[dbT.CreatedBy]; ok {
+		apiT.UserID = cachedName
+	} else {
+		if user, err := s.ticketRepo.FindUserByID(dbT.CreatedBy); err == nil {
+			fullName := strings.TrimSpace(fmt.Sprintf("%s %s", user.FirstName, user.LastName))
+			if fullName != "" {
+				apiT.UserID = fullName
+				userCache[dbT.CreatedBy] = fullName
+			} else {
+				apiT.UserID = user.Username
+				userCache[dbT.CreatedBy] = user.Username
+			}
 		} else {
-			apiT.UserID = user.Username
-		}
-	} else {
-		apiT.UserID = "Usuario General"
-	}
-
-	// Resolve institution
-	if inst, err := s.ticketRepo.FindInstitutionByID(dbT.Institution); err == nil {
-		apiT.Institution = inst.Name
-	}
-
-	// Resolve priority
-	prioName := "Media"
-	dbPrio, err := s.ticketRepo.FindPriorityByID(dbT.PriorityID)
-	if err == nil {
-		prioName = dbPrio.Name
-	} else {
-		if name, ok := PriorityIDToName[dbT.PriorityID]; ok {
-			prioName = name
+			userCache[dbT.CreatedBy] = "Usuario General"
 		}
 	}
-	apiT.Priority = prioName
+
+	// OPTIMIZACIÓN: Resolver Institución con Caché
+	if cachedInst, ok := instCache[dbT.Institution]; ok {
+		apiT.Institution = cachedInst
+	} else {
+		if inst, err := s.ticketRepo.FindInstitutionByID(dbT.Institution); err == nil {
+			apiT.Institution = inst.Name
+			instCache[dbT.Institution] = inst.Name
+		}
+	}
+
+	// OPTIMIZACIÓN: Bypassear la Base de Datos para Prioridades usando el diccionario de Go
+	if name, ok := PriorityIDToName[dbT.PriorityID]; ok {
+		apiT.Priority = name
+	} else {
+		// Fallback extremo
+		dbPrio, err := s.ticketRepo.FindPriorityByID(dbT.PriorityID)
+		if err == nil {
+			apiT.Priority = dbPrio.Name
+		}
+	}
 
 	// Resolve state
 	if stateName, ok := StateIDToName[dbT.StateID]; ok {
