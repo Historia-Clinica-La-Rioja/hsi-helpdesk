@@ -33,7 +33,11 @@ export class AuthService {
   private restoreSession(): void {
     const savedToken = localStorage.getItem('hsi_token');
     const savedUser = localStorage.getItem('hsi_user');
-    if (savedToken && savedUser) {
+    
+    const isValidToken = savedToken && savedToken !== 'null' && savedToken !== 'undefined' && savedToken.trim() !== '';
+    const isValidUser = savedUser && savedUser !== 'null' && savedUser !== 'undefined' && savedUser.trim() !== '';
+
+    if (isValidToken && isValidUser) {
       this.token.set(savedToken);
       try {
         const userObj = JSON.parse(savedUser);
@@ -45,13 +49,17 @@ export class AuthService {
         }
         this.currentUser.set(userObj);
       } catch (e) {
-        this.currentUser.set(null);
+        this.clearSession();
       }
+    } else {
+      this.token.set(null);
+      this.currentUser.set(null);
     }
   }
 
   isLoggedIn(): boolean {
-    return !!this.token();
+    const currentToken = this.token();
+    return !!currentToken && currentToken !== 'null' && currentToken !== 'undefined';
   }
 
   loginHSI(username: string, dni: string): Observable<any> {

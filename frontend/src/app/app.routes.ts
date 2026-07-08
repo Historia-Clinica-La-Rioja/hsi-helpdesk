@@ -35,12 +35,17 @@ export const routes: Routes = [
     loadComponent: () => import('../features/home/home.component').then(m => m.HomeComponent)
   },
   {
+    path: 'tickets', 
+    canActivate: [authGuard],
+    loadComponent: () => import('../features/home/components/tickets-tab/tickets-tab.component').then(m => m.TicketsTabComponent)
+  },
+  {
     path: '',
     redirectTo: 'login',
     pathMatch: 'full'
   },
   {
     path: '**',
-    redirectTo: 'login'
+    redirectTo: 'login' // Ahora sí, solo caerá aquí si escriben una URL que no existe
   }
 ];
