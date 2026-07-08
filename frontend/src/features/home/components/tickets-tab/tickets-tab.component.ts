@@ -2561,10 +2561,7 @@ export class TicketsTabComponent implements OnInit {
   statsTransferidos = computed(() => this.ticketService.tickets().filter(t => t.status === 'transferido').length);
   statsResueltos = computed(() => this.ticketService.tickets().filter(t => t.status === 'resuelto').length);
 
-  @Input() set viewMode(mode: 'create' | 'list' | 'detail') {
-    this.innerViewMode.set(mode);
-  }
-  @Output() viewModeChange = new EventEmitter<'create' | 'list' | 'detail'>();
+
   @Output() ticketSelected = new EventEmitter<Ticket>();
 
   innerViewMode = signal<'create' | 'list' | 'detail'>('create');
@@ -2786,7 +2783,20 @@ export class TicketsTabComponent implements OnInit {
     
     const user = this.authService.currentUser();
     if (user) {
+      // Disparamos la carga de tickets
       this.ticketService.loadTicketsForUser(user.username);
+
+      if (user.role !== 'user') {
+        this.innerViewMode.set('list'); 
+      } else {
+        // Los Usuarios normales arrancan en "crear". 
+        // Salvo que ya tengan tickets cacheados en el servicio, en cuyo caso ven la lista.
+        if (this.ticketService.tickets().length > 0) {
+          this.innerViewMode.set('list');
+        } else {
+          this.innerViewMode.set('create');
+        }
+      }
     }
 
     // 🕒 INICIO DEL POLLING SILENCIOSO (Cada 3 segundos)
@@ -2913,7 +2923,6 @@ export class TicketsTabComponent implements OnInit {
 
   setViewMode(mode: 'create' | 'list' | 'detail'): void {
     this.innerViewMode.set(mode);
-    this.viewModeChange.emit(mode);
     if (mode !== 'detail') {
       this.isEditing.set(false);
     }

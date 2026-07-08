@@ -32,12 +32,26 @@ export const routes: Routes = [
   {
     path: 'home',
     canActivate: [authGuard],
-    loadComponent: () => import('../features/home/home.component').then(m => m.HomeComponent)
-  },
-  {
-    path: 'tickets', 
-    canActivate: [authGuard],
-    loadComponent: () => import('../features/home/components/tickets-tab/tickets-tab.component').then(m => m.TicketsTabComponent)
+    loadComponent: () => import('../features/home/home.component').then(m => m.HomeComponent),
+    children: [
+      {
+        path: 'about',
+        loadComponent: () => import('../features/home/components/about/about.component').then(m => m.AboutComponent)
+      },
+      {
+        path: 'tickets',
+        loadComponent: () => import('../features/home/components/tickets-tab/tickets-tab.component').then(m => m.TicketsTabComponent)
+      },
+      {
+        path: 'training',
+        loadComponent: () => import('../features/home/components/training/training.component').then(m => m.TrainingComponent)
+      },
+      {
+        path: '',
+        redirectTo: 'about',
+        pathMatch: 'full'
+      }
+    ]
   },
   {
     path: '',
@@ -46,6 +60,6 @@ export const routes: Routes = [
   },
   {
     path: '**',
-    redirectTo: 'login' // Ahora sí, solo caerá aquí si escriben una URL que no existe
+    redirectTo: 'login'
   }
 ];
