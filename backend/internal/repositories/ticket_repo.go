@@ -117,7 +117,8 @@ func (r *ticketRepository) Update(ticket *models.DBTicket) error {
 		"assigned_to": ticket.AssignedTo,
 		"closed_at":   ticket.ClosedAt,
 		"resolved_at": ticket.ResolvedAt,
-		"reopened_at": ticket.ReopenedAt,
+		"reopened_at":     ticket.ReopenedAt,
+		"transfer_reason": ticket.TransferReason,
 	}}
 
 	_, err := r.ticketsCol.UpdateOne(ctx, filter, update)

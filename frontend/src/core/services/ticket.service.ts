@@ -29,6 +29,7 @@ export interface Ticket {
   closed_at?: Date;
   resolved_at?: Date;
   reopened_at?: Date;
+  transfer_reason?: string;
 }
 
 @Injectable({
