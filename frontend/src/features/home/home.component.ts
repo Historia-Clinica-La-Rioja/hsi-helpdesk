@@ -6,6 +6,7 @@ import { AboutComponent } from './components/about/about.component';
 import { TicketsTabComponent } from './components/tickets-tab/tickets-tab.component';
 import { TrainingComponent } from './components/training/training.component';
 import { ChatbotWidgetComponent } from '../chatbot/chatbot-widget.component';
+import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/router'; // 👈 IMPORTANTE
 
 @Component({
   selector: 'app-home',
@@ -15,20 +16,19 @@ import { ChatbotWidgetComponent } from '../chatbot/chatbot-widget.component';
     AboutComponent,
     TicketsTabComponent,
     TrainingComponent,
-    ChatbotWidgetComponent
+    ChatbotWidgetComponent,
+    RouterOutlet,
+    RouterLink,
+    RouterLinkActive
   ],
   template: `
     <div class="home-layout">
-      <!-- Sidebar Navigation (64px wide, background #333143) -->
       <aside class="sidebar">
-        <!-- Top Icon: Support Ticket logo -->
         <div class="sidebar-top">
           <span class="material-icons ticket-logo" title="HSI Soporte">confirmation_number</span>
         </div>
 
-        <!-- Middle Icons: Navigation/History -->
         <div class="sidebar-middle">
-          <!-- Tickets list button -->
           <div 
             class="sidebar-item" 
             [class.active]="currentUserRole() !== 'user' || hasTickets()"
@@ -43,7 +43,6 @@ import { ChatbotWidgetComponent } from '../chatbot/chatbot-widget.component';
           </div>
         </div>
 
-        <!-- Bottom Icon: Profile and Logout -->
         <div class="sidebar-bottom">
           <div class="sidebar-item profile-btn" (click)="onLogout()" title="Cerrar sesión">
             <span class="material-icons">account_circle</span>
@@ -52,66 +51,45 @@ import { ChatbotWidgetComponent } from '../chatbot/chatbot-widget.component';
         </div>
       </aside>
 
-      <!-- Main Content Area -->
       <main class="main-content">
-        <!-- Nav Top: 3 centered pill tab buttons -->
         <nav class="nav-top">
           <div class="pill-nav-container">
-            <button 
+            
+            <a 
               class="pill-btn" 
-              [class.active]="activeTab() === 'about'"
-              (click)="setActiveTab('about')"
+              routerLink="about" 
+              routerLinkActive="active"
             >
               Acerca del sistema
-            </button>
+            </a>
             
-            <button 
+            <a 
               class="pill-btn" 
-              [class.active]="activeTab() === 'tickets'"
-              (click)="setActiveTab('tickets')"
+              routerLink="tickets" 
+              routerLinkActive="active"
             >
               Tickets
-            </button>
+            </a>
             
-            <button 
+            <a 
               class="pill-btn" 
-              [class.active]="activeTab() === 'training'"
-              (click)="setActiveTab('training')"
+              routerLink="training" 
+              routerLinkActive="active"
             >
               Capacitación
-            </button>
+            </a>
+
           </div>
         </nav>
 
-        <!-- Content Area: active card according to selected tab -->
         <div class="content-area">
           <div class="content-card">
-            @switch (activeTab()) {
-              @case ('about') {
-                <app-about class="tab-content-fade"></app-about>
-              }
-              @case ('tickets') {
-                <app-tickets-tab 
-                  [viewMode]="ticketsViewMode()" 
-                  (viewModeChange)="onTicketsViewModeChange($event)"
-                  class="tab-content-fade"
-                ></app-tickets-tab>
-              }
-              @case ('training') {
-                @defer (on idle) {
-                  <app-training class="tab-content-fade"></app-training>
-                } @placeholder {
-                  <div class="lazy-placeholder">
-                    <span class="material-icons loading-spin">sync</span>
-                    <p>Cargando recursos de capacitación...</p>
-                  </div>
-                }
-              }
-            }
+            
+            <router-outlet></router-outlet>
+            
           </div>
         </div>
 
-        <!-- ChatBot FAB and overlay widget -->
         @if (currentUserRole() === 'user') {
           <app-chatbot-widget (navigateToTickets)="onChatbotCTAClick()"></app-chatbot-widget>
         }
@@ -355,9 +333,7 @@ import { ChatbotWidgetComponent } from '../chatbot/chatbot-widget.component';
 export class HomeComponent {
   private authService = inject(AuthService);
   private ticketService = inject(TicketService);
-
-  activeTab = signal<'about' | 'tickets' | 'training'>('about');
-  ticketsViewMode = signal<'create' | 'list' | 'detail'>('create');
+  private router = inject(Router);
 
   currentUserRole = computed(() => this.authService.currentUser()?.role || '');
   hasTickets = computed(() => this.ticketService.hasTickets());
@@ -368,35 +344,18 @@ export class HomeComponent {
       const user = this.authService.currentUser();
       if (user) {
         this.ticketService.loadTicketsForUser(user.username);
-        if (user.role !== 'user') {
-          this.ticketsViewMode.set('list');
-        } else if (this.ticketService.hasTickets()) {
-          this.ticketsViewMode.set('list');
-        } else {
-          this.ticketsViewMode.set('create');
-        }
       }
     });
   }
 
-  setActiveTab(tab: 'about' | 'tickets' | 'training'): void {
-    this.activeTab.set(tab);
-  }
-
-  onTicketsViewModeChange(mode: 'create' | 'list' | 'detail'): void {
-    this.ticketsViewMode.set(mode);
-  }
-
   onHistoryIconClick(): void {
     if (this.currentUserRole() !== 'user' || this.hasTickets()) {
-      this.setActiveTab('tickets');
-      this.ticketsViewMode.set('list');
+      this.router.navigate(['/home/tickets']);
     }
   }
 
   onChatbotCTAClick(): void {
-    this.setActiveTab('tickets');
-    this.ticketsViewMode.set('create');
+    this.router.navigate(['/home/tickets']);
   }
 
   onLogout(): void {

@@ -8,6 +8,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { TicketService, Ticket, TicketMessage } from '../../../../core/services/ticket.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { interval, Subscription } from 'rxjs';
 
 export interface Institution {
   _id: string;
@@ -2476,6 +2477,7 @@ export class TicketsTabComponent implements OnInit {
   private fb = inject(FormBuilder);
   private destroyRef = inject(DestroyRef);
   private http = inject(HttpClient);
+  private pollingSub?: Subscription;
 
   readTicketIds = signal<string[]>([]);
   selectedStatusFilter = signal<'todos' | 'abierto' | 'en_progreso' | 'reabierto' | 'transferido' | 'resuelto' | 'cerrado'>('todos');
@@ -2559,10 +2561,7 @@ export class TicketsTabComponent implements OnInit {
   statsTransferidos = computed(() => this.ticketService.tickets().filter(t => t.status === 'transferido').length);
   statsResueltos = computed(() => this.ticketService.tickets().filter(t => t.status === 'resuelto').length);
 
-  @Input() set viewMode(mode: 'create' | 'list' | 'detail') {
-    this.innerViewMode.set(mode);
-  }
-  @Output() viewModeChange = new EventEmitter<'create' | 'list' | 'detail'>();
+
   @Output() ticketSelected = new EventEmitter<Ticket>();
 
   innerViewMode = signal<'create' | 'list' | 'detail'>('create');
@@ -2778,13 +2777,76 @@ export class TicketsTabComponent implements OnInit {
   }
 
   ngOnInit() {
-    // Al iniciar el componente, traemos las instituciones y prioridades de la base de datos
     this.loadInstitutions();
     this.loadPriorities();
     this.loadTags();
     
     const user = this.authService.currentUser();
     if (user) {
+      // Disparamos la carga de tickets
+      this.ticketService.loadTicketsForUser(user.username);
+
+      if (user.role !== 'user') {
+        this.innerViewMode.set('list'); 
+      } else {
+        // Los Usuarios normales arrancan en "crear". 
+        // Salvo que ya tengan tickets cacheados en el servicio, en cuyo caso ven la lista.
+        if (this.ticketService.tickets().length > 0) {
+          this.innerViewMode.set('list');
+        } else {
+          this.innerViewMode.set('create');
+        }
+      }
+    }
+
+    // 🕒 INICIO DEL POLLING SILENCIOSO (Cada 3 segundos)
+    this.pollingSub = interval(3000).subscribe(() => {
+      this.recargarMensajesSilencioso();
+    });
+
+    // 🧹 LIMPIEZA AUTOMÁTICA: Usamos tu destroyRef para apagar el reloj
+    this.destroyRef.onDestroy(() => {
+      if (this.pollingSub) {
+        this.pollingSub.unsubscribe();
+      }
+    });
+  }
+
+  recargarMensajesSilencioso() {
+    const sel = this.selectedTicket();
+
+    if (sel && this.innerViewMode() === 'detail' && !this.isEditing() && !this.isSendingComment()) {
+      this.ticketService.getTicketDetails(sel.id).subscribe({
+        next: (updatedTicket) => {
+          const mensajesActuales = sel.messages?.length || 0;
+          const mensajesNuevos = updatedTicket.messages?.length || 0;
+
+          // Solo repintamos el ticket si llegó un mensaje nuevo o si alguien le cambió el estado
+          if (mensajesNuevos > mensajesActuales || updatedTicket.status !== sel.status) {
+            const parsed = {
+              ...updatedTicket,
+              created_at: new Date(updatedTicket.created_at),
+              updated_at: new Date(updatedTicket.updated_at),
+              closed_at: updatedTicket.closed_at ? new Date(updatedTicket.closed_at) : undefined,
+              resolved_at: updatedTicket.resolved_at ? new Date(updatedTicket.resolved_at) : undefined,
+              reopened_at: updatedTicket.reopened_at ? new Date(updatedTicket.reopened_at) : undefined,
+              messages: updatedTicket.messages ? updatedTicket.messages.map((m: any) => ({
+                ...m,
+                created_at: new Date(m.created_at)
+              })) : []
+            };
+            this.selectedTicket.set(parsed);
+          }
+        },
+        error: (err) => {
+          console.warn('Error en polling silencioso del chat:', err);
+        }
+      });
+    }
+
+    // para que aparezcan los nuevos tickets o cambios de estado al instante
+    const user = this.authService.currentUser();
+    if (user && this.innerViewMode() === 'list') {
       this.ticketService.loadTicketsForUser(user.username);
     }
   }
@@ -2861,7 +2923,6 @@ export class TicketsTabComponent implements OnInit {
 
   setViewMode(mode: 'create' | 'list' | 'detail'): void {
     this.innerViewMode.set(mode);
-    this.viewModeChange.emit(mode);
     if (mode !== 'detail') {
       this.isEditing.set(false);
     }
