@@ -316,13 +316,6 @@ export interface Priority {
                 >
                   Resuelto
                 </button>
-                <button 
-                  class="agent-tab-btn" 
-                  [class.active]="selectedStatusFilter() === 'cerrado'"
-                  (click)="setStatusFilter('cerrado')"
-                >
-                  Cerrado
-                </button>
               </div>
             </div>
           }
@@ -362,6 +355,13 @@ export interface Priority {
 
                       <!-- Right elements: State Badges -> Nuevo Badge -> Time Elapsed -->
                       <div class="top-row-right" style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+                        <!-- Unread Response Badge -->
+                        @if (hasUnreadResponse(ticket)) {
+                          <span class="status-badge unread-response-badge" title="Nueva respuesta">
+                            <span class="material-icons" style="font-size: 12px; vertical-align: middle;">chat</span>
+                          </span>
+                        }
+
                         <!-- Status Badges -->
                         <span class="status-badge" [ngClass]="ticket.status">
                           {{ getStatusLabel(ticket.status) }}
@@ -369,11 +369,6 @@ export interface Priority {
                         @if (ticket.status === 'transferido' || ticket.status === 'reabierto') {
                           <span class="status-badge en_progreso">
                             En progreso
-                          </span>
-                        }
-                        @if (ticket.status === 'resuelto' || ticket.status === 'cerrado') {
-                          <span class="status-badge cerrado">
-                            Cerrado
                           </span>
                         }
 
@@ -415,7 +410,7 @@ export interface Priority {
                             <span>Reabierto el {{ ticket.reopened_at | date:'dd/MM/yyyy HH:mm' }}</span>
                           </div>
                         }
-                        @if ((ticket.status === 'resuelto' || ticket.status === 'cerrado') && ticket.resolved_at) {
+                        @if (ticket.status === 'resuelto' && ticket.resolved_at) {
                           <div class="card-timestamp-info-row closed" style="font-size: 12px; display: flex; align-items: center; gap: 4px;">
                             <span class="material-icons" style="font-size: 14px; vertical-align: middle;">check_circle</span>
                             <span>Resuelto el {{ ticket.resolved_at | date:'dd/MM/yyyy HH:mm' }}</span>
@@ -441,6 +436,22 @@ export interface Priority {
                         </span>
                       }
                     </div>
+
+                    <!-- Specialist Reassigned Badge for Agent -->
+                    @if (currentUserRole() !== 'user' && ticket.status === 'transferido' && ticket.assigned_to === currentUserId()) {
+                      <div class="agent-specialist-badge-row" style="margin-top: 8px; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: #E65100; background-color: #FFF3E0; border: 1px solid #FFE0B2; padding: 4px 10px; border-radius: 8px; width: fit-content;">
+                        <span class="material-icons" style="font-size: 14px; color: #E65100; vertical-align: middle;">star</span>
+                        <span>Te han reasignado este ticket por ser agente especializado</span>
+                      </div>
+                    }
+
+                    <!-- Specialist Reassigned Badge for User -->
+                    @if (currentUserRole() === 'user' && ticket.status === 'transferido' && ticket.assigned_to) {
+                      <div class="user-specialist-badge-row" style="margin-top: 8px; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: #0288D1; background-color: #E1F5FE; border: 1px solid #B3E5FC; padding: 4px 10px; border-radius: 8px; width: fit-content;">
+                        <span class="material-icons" style="font-size: 14px; color: #0288D1; vertical-align: middle;">support_agent</span>
+                        <span>Este ticket ha sido reasignado a un agente especializado -> {{ getAgentName(ticket.assigned_to) }}</span>
+                      </div>
+                    }
                   </div>
                 </div>
               }
@@ -461,10 +472,16 @@ export interface Priority {
                     <button class="edit-btn" (click)="onEditStart()">
                       <span class="material-icons">edit</span> Editar
                     </button>
-                  } @else if (currentUserRole() === 'user' && ticket.editCount && ticket.editCount >= 1) {
-                    <div class="edit-limit-badge">
-                      <span class="material-icons info-icon">info</span> Límite de 1 edición alcanzado
-                    </div>
+                  } @else if (currentUserRole() === 'user') {
+                    @if (ticket.editCount && ticket.editCount >= 1) {
+                      <div class="edit-limit-badge">
+                        <span class="material-icons info-icon">info</span> Límite de 1 edición alcanzado
+                      </div>
+                    } @else if (ticket.status !== 'abierto' || hasAgentResponse(ticket)) {
+                      <div class="edit-limit-badge">
+                        <span class="material-icons info-icon">info</span> No es posible editar el ticket después de la respuesta de un agente
+                      </div>
+                    }
                   }
                 }
               }
@@ -504,11 +521,7 @@ export interface Priority {
                           En progreso
                         </span>
                       }
-                      @if (ticket.status === 'resuelto' || ticket.status === 'cerrado') {
-                        <span class="status-badge cerrado">
-                          Cerrado
-                        </span>
-                      }
+
                     </div>
                   </div>
                   <div class="info-block">
@@ -527,9 +540,9 @@ export interface Priority {
                       <span class="info-value" style="color: #C71585; font-weight: 600;">{{ ticket.reopened_at | date:'dd/MM/yyyy HH:mm' }}</span>
                     </div>
                   }
-                  @if ((ticket.status === 'resuelto' || ticket.status === 'cerrado') && ticket.resolved_at) {
+                  @if (ticket.status === 'resuelto' && ticket.resolved_at) {
                     <div class="info-block">
-                      <span class="info-label">Resuelto/Cerrado</span>
+                      <span class="info-label">Resuelto</span>
                       <span class="info-value" style="color: #2E7D32; font-weight: 600;">{{ ticket.resolved_at | date:'dd/MM/yyyy HH:mm' }}</span>
                     </div>
                   }
@@ -541,12 +554,28 @@ export interface Priority {
                   }
                 </div>
 
+                <!-- Specialist Reassigned Badge for Agent in Detail -->
+                @if (currentUserRole() !== 'user' && ticket.status === 'transferido' && ticket.assigned_to === currentUserId()) {
+                  <div class="detail-specialist-badge" style="background: #FFF3E0; border: 1px solid #FFE0B2; padding: 12px 16px; border-radius: 8px; color: #E65100; font-family: var(--font-body); font-size: 13px; display: flex; align-items: center; gap: 8px; font-weight: 600; margin-top: 16px; margin-bottom: 8px; width: fit-content;">
+                    <span class="material-icons" style="font-size: 18px; color: #E65100; vertical-align: middle;">star</span>
+                    <span>Te han reasignado este ticket por ser agente especializado</span>
+                  </div>
+                }
+
+                <!-- Specialist Reassigned Badge for User in Detail -->
+                @if (currentUserRole() === 'user' && ticket.status === 'transferido' && ticket.assigned_to) {
+                  <div class="detail-specialist-badge" style="background: #E1F5FE; border: 1px solid #B3E5FC; padding: 12px 16px; border-radius: 8px; color: #0288D1; font-family: var(--font-body); font-size: 13px; display: flex; align-items: center; gap: 8px; font-weight: 600; margin-top: 16px; margin-bottom: 8px; width: fit-content;">
+                    <span class="material-icons" style="font-size: 18px; color: #0288D1; vertical-align: middle;">support_agent</span>
+                    <span>Se ha asignado a un agente especializado para tu consulta -> {{ getAgentName(ticket.assigned_to) }}</span>
+                  </div>
+                }
+
                 <div class="detail-description-section">
                   <h4>Descripción del incidente</h4>
                   <p class="description-text">{{ ticket.description }}</p>
                 </div>
 
-                @if (ticket.transfer_reason) {
+                @if (currentUserRole() !== 'user' && ticket.transfer_reason) {
                   <div class="transfer-reason-card" style="background: #FFF9C4; border: 1px solid #FFF59D; padding: 15px; border-radius: 8px; color: #5D4037; font-family: var(--font-body); font-size: 13px; display: flex; flex-direction: column; gap: 6px; margin-top: 16px; margin-bottom: 8px;">
                     <div style="display: flex; align-items: center; gap: 6px; font-weight: 700;">
                       <span class="material-icons" style="font-size: 18px; color: #F57F17; vertical-align: middle;">swap_horiz</span>
@@ -563,7 +592,7 @@ export interface Priority {
                       <div class="admin-actions-toolbar">
                         <!-- Resolve Action Button -->
                         <div class="status-buttons-group">
-                          @if (ticket.status !== 'resuelto' && ticket.status !== 'cerrado') {
+                          @if (ticket.status !== 'resuelto') {
                             <button 
                               type="button" 
                               class="resolve-action-btn"
@@ -575,7 +604,7 @@ export interface Priority {
                           } @else {
                             <div class="ticket-resolved-badge-large">
                               <span class="material-icons" style="font-size: 18px; vertical-align: middle;">check_circle</span>
-                              Ticket Resuelto y Cerrado
+                              Ticket Resuelto
                             </div>
                           }
                         </div>
@@ -654,15 +683,23 @@ export interface Priority {
                 <div class="comments-list">
                   <!-- Render custom messages/comments -->
                   @for (comment of ticketComments(); track comment.id) {
-                    <div class="comment-item" [ngClass]="comment.role">
-                      <div class="comment-header">
-                        <span class="comment-sender">
-                          {{ getCommentSender(comment) }}
-                        </span>
-                        <span class="comment-time">{{ comment.created_at | date:'dd/MM/yyyy HH:mm' }}</span>
+                    @if (comment.role === 'system') {
+                      <div class="system-comment-notice">
+                        <span class="material-icons">info</span>
+                        <span>{{ comment.content }}</span>
+                        <span class="comment-time-system">{{ comment.created_at | date:'dd/MM/yyyy HH:mm' }}</span>
                       </div>
-                      <p class="comment-body">{{ comment.content }}</p>
-                    </div>
+                    } @else {
+                      <div class="comment-item" [ngClass]="comment.role">
+                        <div class="comment-header">
+                          <span class="comment-sender">
+                            {{ getCommentSender(comment) }}
+                          </span>
+                          <span class="comment-time">{{ comment.created_at | date:'dd/MM/yyyy HH:mm' }}</span>
+                        </div>
+                        <p class="comment-body">{{ comment.content }}</p>
+                      </div>
+                    }
                   }
                 </div>
 
@@ -835,6 +872,51 @@ export interface Priority {
               </div>
             </div>
           </div>
+        </div>
+      }
+
+      <!-- Popups section -->
+      @if (showCreateSuccess()) {
+        <div class="success-overlay">
+          <div class="success-dialog">
+            <span class="material-icons success-icon">check_circle</span>
+            <h4>Ticket creado correctamente</h4>
+            <p class="clarification-text">
+              Es posible editar un ticket solo una vez, antes de que un agente responda. Luego de que se inicie la conversación con el agente, el contenido del mismo no podrá ser modificado.
+            </p>
+            <div class="success-actions">
+              <button class="accept-btn" (click)="showCreateSuccess.set(false)">Entendido</button>
+            </div>
+          </div>
+        </div>
+      }
+
+      @if (showReopenInfo()) {
+        <div class="success-overlay">
+          <div class="success-dialog">
+            <span class="material-icons" style="font-size: 54px; color: var(--bot-blue);">info</span>
+            <h4>Ticket Resuelto</h4>
+            <p class="clarification-text">
+              Este ticket ha sido marcado como resuelto por el equipo de soporte. Si considerás que el problema aún no fue solucionado, podés reabrirlo automáticamente enviando un nuevo comentario en el historial de mensajes de abajo.
+            </p>
+            <div class="success-actions">
+              <button class="accept-btn" (click)="showReopenInfo.set(false)" style="background-color: var(--bot-blue);">Entendido</button>
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- Floating Toast Notification -->
+      @if (toastMessage(); as message) {
+        <div class="toast-notification" (click)="goToTicketFromToast()">
+          <span class="material-icons toast-icon">notifications_active</span>
+          <div class="toast-content">
+            <span class="toast-title">Nueva respuesta</span>
+            <span class="toast-text">{{ message }}</span>
+          </div>
+          <button class="toast-close" (click)="closeToast($event)">
+            <span class="material-icons">close</span>
+          </button>
         </div>
       }
     </div>
@@ -2487,6 +2569,236 @@ export interface Priority {
     .transfer-modal-btn .material-icons {
       font-size: 18px;
     }
+
+    /* Popups and distinct alerts styles */
+    .success-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(51, 49, 67, 0.6);
+      backdrop-filter: blur(4px);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: fadeIn 0.25s ease-out;
+    }
+
+    .success-dialog {
+      background-color: var(--color-bg-primary, #fff);
+      padding: 32px;
+      border-radius: 16px;
+      width: 90%;
+      max-width: 450px;
+      text-align: center;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      animation: scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .success-icon {
+      font-size: 54px;
+      color: var(--color-success, #2E9E7A);
+    }
+
+    .success-dialog h4 {
+      margin: 0;
+      font-family: var(--font-heading);
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--color-text-primary);
+    }
+
+    .clarification-text {
+      margin: 0;
+      font-family: var(--font-body);
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--color-text-secondary);
+    }
+
+    .success-actions {
+      margin-top: 8px;
+      width: 100%;
+    }
+
+    .success-actions .accept-btn {
+      width: 100%;
+      height: 44px;
+      background-color: var(--color-accent-teal);
+      color: white;
+      border: none;
+      border-radius: var(--radius-button, 8px);
+      font-family: var(--font-heading);
+      font-weight: 600;
+      font-size: 15px;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+
+    .success-actions .accept-btn:hover {
+      background-color: var(--color-accent-teal-hover);
+    }
+
+    /* System notifications in message history thread */
+    .system-comment-notice {
+      align-self: center;
+      background-color: #E3F2FD;
+      border: 1px solid #BBDEFB;
+      border-radius: 8px;
+      padding: 10px 16px;
+      color: #0D47A1;
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      max-width: 90%;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+      box-sizing: border-box;
+    }
+
+    .comment-time-system {
+      font-size: 10px;
+      color: #1565C0;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes scaleIn {
+      from { transform: scale(0.9); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .status-badge.unread-response-badge {
+      background-color: rgba(64, 141, 243, 0.15) !important;
+      color: var(--bot-blue) !important;
+      border: 1.5px solid rgba(64, 141, 243, 0.3) !important;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 !important;
+      width: 22px;
+      height: 22px;
+      border-radius: 50% !important;
+      animation: heartbeat 1.5s infinite ease-in-out;
+    }
+
+    @keyframes heartbeat {
+      0% {
+        transform: scale(1);
+      }
+      14% {
+        transform: scale(1.2);
+      }
+      28% {
+        transform: scale(1);
+      }
+      42% {
+        transform: scale(1.2);
+      }
+      70% {
+        transform: scale(1);
+      }
+    }
+
+    .toast-notification {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background-color: var(--color-bg-primary);
+      border: 1px solid var(--color-border);
+      border-left: 4px solid var(--bot-blue);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: var(--shadow-bot-chat);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      animation: slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      max-width: 380px;
+      transition: all 0.2s ease;
+    }
+
+    .toast-notification:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 20px 40px rgba(51, 49, 67, 0.25);
+    }
+
+    .toast-icon {
+      color: var(--bot-blue);
+      font-size: 24px;
+      background-color: rgba(64, 141, 243, 0.1);
+      padding: 8px;
+      border-radius: 50%;
+    }
+
+    .toast-content {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding-right: 8px;
+    }
+
+    .toast-title {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--color-text-primary);
+    }
+
+    .toast-text {
+      font-family: var(--font-body);
+      font-size: 12px;
+      color: var(--color-text-muted);
+      line-height: 1.4;
+    }
+
+    .toast-close {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--color-text-muted);
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: background-color 0.2s;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+
+    .toast-close:hover {
+      background-color: var(--color-bg-secondary);
+      color: var(--color-text-primary);
+    }
+
+    @keyframes slideInRight {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
   `]
 })
 
@@ -2499,8 +2811,13 @@ export class TicketsTabComponent implements OnInit {
   private pollingSub?: Subscription;
 
   readTicketIds = signal<string[]>([]);
-  selectedStatusFilter = signal<'todos' | 'abierto' | 'en_progreso' | 'reabierto' | 'transferido' | 'resuelto' | 'cerrado'>('todos');
+  selectedStatusFilter = signal<'todos' | 'abierto' | 'en_progreso' | 'reabierto' | 'transferido' | 'resuelto'>('todos');
   searchQuery = signal<string>('');
+
+  lastSeenMessageTimes = signal<{ [ticketId: string]: string }>({});
+  toastMessage = signal<string | null>(null);
+  toastTicketId = signal<string | null>(null);
+  notifiedMessageIds = new Set<string>();
 
   systemTags = signal<any[]>([]);
 
@@ -2646,8 +2963,6 @@ export class TicketsTabComponent implements OnInit {
         filtered = filtered.filter(t => t.assigned_to === currentUserId && t.status === 'transferido');
       } else if (filter === 'resuelto') {
         filtered = filtered.filter(t => t.assigned_to === currentUserId && t.status === 'resuelto');
-      } else if (filter === 'cerrado') {
-        filtered = filtered.filter(t => t.assigned_to === currentUserId && t.status === 'cerrado');
       }
 
       // Search query filtering
@@ -2667,14 +2982,16 @@ export class TicketsTabComponent implements OnInit {
         const isNew = role !== 'user' && this.isTicketNew(t);
         if (isNew) return 1;
 
+        const hasResponse = this.hasUnreadResponse(t);
+        if (hasResponse) return 2;
+
         switch (t.status) {
-          case 'abierto': return 2;
-          case 'reabierto': return 3;
+          case 'abierto': return 3;
+          case 'reabierto': return 4;
           case 'en_progreso':
-          case 'transferido': return 4;
-          case 'resuelto':
-          case 'cerrado': return 5;
-          default: return 6;
+          case 'transferido': return 5;
+          case 'resuelto': return 6;
+          default: return 7;
         }
       };
 
@@ -2700,6 +3017,103 @@ export class TicketsTabComponent implements OnInit {
     } catch (e) {
       console.error('Error reading read_ticket_ids:', e);
     }
+  }
+
+  initLastSeenTimes(userId: string): void {
+    try {
+      const stored = localStorage.getItem(`last_seen_message_times_${userId}`);
+      if (stored) {
+        this.lastSeenMessageTimes.set(JSON.parse(stored));
+      } else {
+        this.lastSeenMessageTimes.set({});
+      }
+    } catch (e) {
+      console.error('Error reading last_seen_message_times:', e);
+    }
+  }
+
+  markTicketMessagesAsSeen(ticketId: string, lastMsgTime: Date): void {
+    const user = this.authService.currentUser();
+    if (!user) return;
+
+    // Check if the current user is the one who should see notifications for this ticket
+    // If they are an agent but not the assigned agent, we don't need to mark it as read for them!
+    const ticket = this.ticketService.tickets().find(t => t.id === ticketId);
+    if (ticket) {
+      const userRole = user.role;
+      const isOwnerOrAssigned = (userRole === 'user' && ticket.user_id === user.username) ||
+                                 (userRole !== 'user' && ticket.assigned_to === user.id);
+      if (!isOwnerOrAssigned) {
+        // If a curious agent is viewing a ticket that is not assigned to them, do not mark as seen
+        return;
+      }
+    }
+
+    const times = { ...this.lastSeenMessageTimes() };
+    times[ticketId] = lastMsgTime.toISOString();
+    this.lastSeenMessageTimes.set(times);
+    try {
+      localStorage.setItem(`last_seen_message_times_${user.id}`, JSON.stringify(times));
+    } catch (e) {
+      console.error('Error saving last_seen_message_times:', e);
+    }
+    // Also if this ticket is currently showing in the toast, clear the toast
+    if (this.toastTicketId() === ticketId) {
+      this.toastMessage.set(null);
+      this.toastTicketId.set(null);
+    }
+  }
+
+  hasUnreadResponse(ticket: Ticket): boolean {
+    if (ticket.status === 'resuelto') return false;
+    if (!ticket.messages || ticket.messages.length === 0) return false;
+
+    const lastMsg = ticket.messages[ticket.messages.length - 1];
+    const userRole = this.currentUserRole();
+    const currentUserId = this.authService.currentUser()?.id || '';
+    
+    if (userRole === 'user') {
+      // Regular user: any message not from 'user' is a response
+      const isResponse = lastMsg.role !== 'user';
+      if (!isResponse) return false;
+
+      const lastSeen = this.lastSeenMessageTimes()[ticket.id];
+      if (!lastSeen) return true;
+      return new Date(lastMsg.created_at).getTime() > new Date(lastSeen).getTime();
+    } else {
+      // Agent/Support:
+      // 1. "abierto" status does not carry "nueva respuesta" (it's handled by "nuevo" badge)
+      if (ticket.status === 'abierto') return false;
+
+      // 2. Must be assigned to the current agent
+      if (!ticket.assigned_to || ticket.assigned_to !== currentUserId) return false;
+
+      // 3. Last message must be from the user
+      const isResponse = lastMsg.role === 'user';
+      if (!isResponse) return false;
+
+      const lastSeen = this.lastSeenMessageTimes()[ticket.id];
+      if (!lastSeen) return true;
+      return new Date(lastMsg.created_at).getTime() > new Date(lastSeen).getTime();
+    }
+  }
+
+  goToTicketFromToast(): void {
+    const ticketId = this.toastTicketId();
+    if (ticketId) {
+      const t = this.ticketService.tickets().find(x => x.id === ticketId);
+      if (t) {
+        this.onSelectTicket(t);
+      }
+    }
+    this.toastMessage.set(null);
+    this.toastTicketId.set(null);
+  }
+
+  closeToast(event: Event): void {
+    event.stopPropagation();
+    this.toastMessage.set(null);
+    this.toastTicketId.set(null);
   }
 
   isTicketNew(ticket: Ticket): boolean {
@@ -2730,6 +3144,10 @@ export class TicketsTabComponent implements OnInit {
   editDescription = '';
   editPriority = 'Media';
 
+  // Popups signals
+  showCreateSuccess = signal(false);
+  showReopenInfo = signal(false);
+
   // Comments signals
   newCommentText = '';
   isSendingComment = signal(false);
@@ -2743,6 +3161,59 @@ export class TicketsTabComponent implements OnInit {
   constructor() {
     this.initForm();
     this.initReadTickets();
+
+    // Load last seen times when user changes
+    effect(() => {
+      const user = this.authService.currentUser();
+      if (user) {
+        this.initLastSeenTimes(user.id);
+      }
+    });
+
+    // Check for new responses and show toast notifications
+    effect(() => {
+      const tickets = this.ticketService.tickets();
+      const user = this.authService.currentUser();
+      if (!user || tickets.length === 0) return;
+
+
+
+      let hasNewNotification = false;
+      let toastMsg = '';
+      let toastId = '';
+
+      for (const t of tickets) {
+        if (this.hasUnreadResponse(t)) {
+          const lastMsg = t.messages![t.messages!.length - 1];
+          // If we haven't notified about this message ID in this session yet, and we are not currently viewing it
+          const sel = this.selectedTicket();
+          const isCurrentlyViewing = sel && sel.id === t.id && this.innerViewMode() === 'detail';
+
+          if (isCurrentlyViewing) {
+            // Automatically mark as read if currently viewing
+            this.markTicketMessagesAsSeen(t.id, new Date(lastMsg.created_at));
+          } else if (!this.notifiedMessageIds.has(lastMsg.id)) {
+            this.notifiedMessageIds.add(lastMsg.id);
+            toastMsg = `El ticket "${t.title}" tiene un nuevo mensaje.`;
+            toastId = t.id;
+            hasNewNotification = true;
+          }
+        }
+      }
+
+      if (hasNewNotification) {
+        this.toastMessage.set(toastMsg);
+        this.toastTicketId.set(toastId);
+        
+        // Auto-close toast after 6 seconds
+        setTimeout(() => {
+          if (this.toastTicketId() === toastId) {
+            this.toastMessage.set(null);
+            this.toastTicketId.set(null);
+          }
+        }, 6000);
+      }
+    });
 
     //  // Periodic sync interval (5 seconds)
     // const intervalId = setInterval(() => {
@@ -2806,14 +3277,14 @@ export class TicketsTabComponent implements OnInit {
     this.loadInstitutions();
     this.loadPriorities();
     this.loadTags();
-    
+
     const user = this.authService.currentUser();
     if (user) {
       // Disparamos la carga de tickets
       this.ticketService.loadTicketsForUser(user.username);
 
       if (user.role !== 'user') {
-        this.innerViewMode.set('list'); 
+        this.innerViewMode.set('list');
       } else {
         // Los Usuarios normales arrancan en "crear". 
         // Salvo que ya tengan tickets cacheados en el servicio, en cuyo caso ven la lista.
@@ -2862,6 +3333,12 @@ export class TicketsTabComponent implements OnInit {
               })) : []
             };
             this.selectedTicket.set(parsed);
+            
+            // Mark as seen immediately since the user is in detail view of this ticket
+            const lastMsgTime = parsed.messages && parsed.messages.length > 0
+              ? parsed.messages[parsed.messages.length - 1].created_at
+              : new Date();
+            this.markTicketMessagesAsSeen(parsed.id, lastMsgTime);
           }
         },
         error: (err) => {
@@ -3058,6 +3535,7 @@ export class TicketsTabComponent implements OnInit {
         this.attachments.set([]);
         this.selectedPriority.set('Media');
         this.setViewMode('list');
+        this.showCreateSuccess.set(true);
       },
       error: () => {
         this.isSubmitting.set(false);
@@ -3073,9 +3551,30 @@ export class TicketsTabComponent implements OnInit {
     }
     this.ticketService.getTicketDetails(t.id).subscribe({
       next: (fullTicket) => {
-        this.selectedTicket.set(fullTicket);
+        const parsed = {
+          ...fullTicket,
+          created_at: new Date(fullTicket.created_at),
+          updated_at: new Date(fullTicket.updated_at),
+          closed_at: fullTicket.closed_at ? new Date(fullTicket.closed_at) : undefined,
+          resolved_at: fullTicket.resolved_at ? new Date(fullTicket.resolved_at) : undefined,
+          reopened_at: fullTicket.reopened_at ? new Date(fullTicket.reopened_at) : undefined,
+          messages: fullTicket.messages ? fullTicket.messages.map((m: any) => ({
+            ...m,
+            created_at: new Date(m.created_at)
+          })) : []
+        };
+        this.selectedTicket.set(parsed);
         this.setViewMode('detail');
-        this.ticketSelected.emit(fullTicket);
+        this.ticketSelected.emit(parsed);
+
+        const lastMsgTime = parsed.messages && parsed.messages.length > 0
+          ? parsed.messages[parsed.messages.length - 1].created_at
+          : new Date();
+        this.markTicketMessagesAsSeen(parsed.id, lastMsgTime);
+
+        if (this.currentUserRole() === 'user' && parsed.status === 'resuelto') {
+          this.showReopenInfo.set(true);
+        }
       },
       error: (err) => {
         console.error('Error fetching ticket details:', err);
@@ -3099,7 +3598,13 @@ export class TicketsTabComponent implements OnInit {
     const user = this.authService.currentUser();
     if (!user || user.role !== 'user') return false;
     if (ticket.status !== 'abierto') return false;
-    return !ticket.editCount || ticket.editCount < 1;
+    if (ticket.editCount && ticket.editCount >= 1) return false;
+    return !this.hasAgentResponse(ticket);
+  }
+
+  hasAgentResponse(ticket: Ticket): boolean {
+    const messages = ticket.messages || [];
+    return messages.some(m => m.role === 'agent' || m.role === 'admin' || m.role === 'owner');
   }
 
   onEditStart(): void {
@@ -3198,6 +3703,9 @@ export class TicketsTabComponent implements OnInit {
   getCommentSender(comment: TicketMessage): string {
     if (comment.role === 'bot') {
       return 'Asistente Virtual';
+    }
+    if (comment.role === 'system') {
+      return 'Sistema';
     }
     return this.formatDisplayName(comment.sender_id);
   }
@@ -3320,7 +3828,7 @@ export class TicketsTabComponent implements OnInit {
     return this.formatDisplayName(agentId);
   }
 
-  setStatusFilter(filter: 'todos' | 'abierto' | 'en_progreso' | 'reabierto' | 'transferido' | 'resuelto' | 'cerrado'): void {
+  setStatusFilter(filter: 'todos' | 'abierto' | 'en_progreso' | 'reabierto' | 'transferido' | 'resuelto'): void {
     this.selectedStatusFilter.set(filter);
   }
 
