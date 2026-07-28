@@ -6,7 +6,7 @@ import { AuthService } from './auth.service';
 export interface TicketMessage {
   id: string;
   sender_id: string;
-  role: 'bot' | 'user' | 'agent';
+  role: 'bot' | 'user' | 'agent' | 'system' | 'admin' | 'owner';
   content: string;
   created_at: Date;
 }
@@ -18,7 +18,7 @@ export interface Ticket {
   user_id: string;
   institution: string;
   priority: string;
-  status: 'abierto' | 'en_progreso' | 'resuelto' | 'cerrado' | 'transferido' | 'reabierto';
+  status: 'abierto' | 'en_progreso' | 'resuelto' | 'transferido' | 'reabierto';
   tags: string[];
   attachments: string[];
   created_at: Date;
