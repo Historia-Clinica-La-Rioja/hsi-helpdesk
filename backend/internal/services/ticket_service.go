@@ -30,7 +30,7 @@ var (
 		"abierto":     mustObjectID("6a20234c2660243a1e9df8a3"),
 		"en_progreso": mustObjectID("6a20234c2660243a1e9df8a4"),
 		"resuelto":    mustObjectID("6a20234c2660243a1e9df8a6"),
-		"cerrado":     mustObjectID("6a20234c2660243a1e9df8a7"),
+		"cerrado":     mustObjectID("6a20234c2660243a1e9df8a6"),
 		"transferido": mustObjectID("6a20234c2660243a1e9df8a5"),
 		"reabierto":   mustObjectID("6a216e36c50ba547a89df8a3"),
 	}
@@ -40,7 +40,7 @@ var (
 		mustObjectID("6a20234c2660243a1e9df8a4"): "en_progreso",
 		mustObjectID("6a20234c2660243a1e9df8a5"): "transferido",
 		mustObjectID("6a20234c2660243a1e9df8a6"): "resuelto",
-		mustObjectID("6a20234c2660243a1e9df8a7"): "cerrado",
+		mustObjectID("6a20234c2660243a1e9df8a7"): "resuelto",
 		mustObjectID("6a216e36c50ba547a89df8a3"): "reabierto",
 	}
 )
@@ -272,6 +272,38 @@ func (s *ticketService) GetTickets(userObjectID primitive.ObjectID, role string)
 	apiTickets := make([]models.APITicket, 0, len(dbTickets))
 	for _, dbT := range dbTickets {
 		apiT := s.populateAPITicket(&dbT, tagMap, userCache, instCache)
+		
+		// Fetch messages/comments for this ticket
+		dbMsgs, err := s.ticketRepo.GetMessagesByTicketID(dbT.ID)
+		if err == nil && len(dbMsgs) > 0 {
+			apiT.Messages = make([]models.APIMessage, 0, len(dbMsgs))
+			for _, dbM := range dbMsgs {
+				apiM := models.APIMessage{
+					ID:        dbM.ID.Hex(),
+					SenderID:  dbM.SenderID,
+					Role:      dbM.Role,
+					Content:   dbM.Text,
+					CreatedAt: dbM.SentAt,
+				}
+				// Resolve sender name using cached userCache
+				if senderObjID, err := primitive.ObjectIDFromHex(dbM.SenderID); err == nil {
+					if cachedName, ok := userCache[senderObjID]; ok {
+						apiM.SenderID = cachedName
+					} else {
+						if user, err := s.ticketRepo.FindUserByID(senderObjID); err == nil {
+							name := strings.TrimSpace(fmt.Sprintf("%s %s", user.FirstName, user.LastName))
+							if name == "" {
+								name = user.Username
+							}
+							userCache[senderObjID] = name
+							apiM.SenderID = name
+						}
+					}
+				}
+				apiT.Messages = append(apiT.Messages, apiM)
+			}
+		}
+
 		apiTickets = append(apiTickets, *apiT)
 	}
 
@@ -342,6 +374,16 @@ func (s *ticketService) UpdateTicket(userObjectID primitive.ObjectID, role strin
 
 	if dbT.EditCount >= 1 {
 		return nil, errors.New("límite de 1 edición alcanzado")
+	}
+
+	// Block edit if an agent/admin/owner has commented/responded
+	dbMsgs, err := s.ticketRepo.GetMessagesByTicketID(ticketID)
+	if err == nil {
+		for _, msg := range dbMsgs {
+			if msg.Role == "agent" || msg.Role == "admin" || msg.Role == "owner" {
+				return nil, errors.New("no se puede editar el ticket porque ya ha sido respondido por un agente")
+			}
+		}
 	}
 
 	var priorityID primitive.ObjectID
@@ -442,12 +484,14 @@ func (s *ticketService) AddMessage(userObjectID primitive.ObjectID, role string,
 		}
 	}
 
-	if stateChanged {
-		err = s.ticketRepo.Update(dbT)
-		if err != nil {
-			return nil, fmt.Errorf("error updating ticket status: %w", err)
-		}
+	// Always update the ticket's UpdateAt timestamp and save it in repository
+	dbT.UpdatedAt = time.Now()
+	err = s.ticketRepo.Update(dbT)
+	if err != nil {
+		return nil, fmt.Errorf("error updating ticket: %w", err)
+	}
 
+	if stateChanged {
 		auditState := &models.AuditLog{
 			ID:          primitive.NewObjectID(),
 			TicketID:    ticketID,
@@ -623,6 +667,18 @@ func (s *ticketService) AssignTicket(userObjectID primitive.ObjectID, role strin
 		InsertedAt:  time.Now(),
 	}
 	go func(a *models.AuditLog) { _ = s.ticketRepo.InsertAuditLog(a) }(audit)
+
+	// Insert system message for transfer notification
+	transferMsg := &models.DBMessage{
+		ID:          primitive.NewObjectID(),
+		TicketID:    ticketID,
+		SenderID:    "system",
+		Role:        "system",
+		Text:        fmt.Sprintf("Han transferido tu ticket a un usuario especializado en el tema que están tratando -> %s", agentName),
+		Attachments: []string{},
+		SentAt:      time.Now(),
+	}
+	_ = s.ticketRepo.InsertMessage(transferMsg)
 
 	return s.populateAPITicket(dbT, s.getTagMap(), make(map[primitive.ObjectID]string), make(map[primitive.ObjectID]string)), nil
 }

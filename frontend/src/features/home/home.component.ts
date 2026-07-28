@@ -95,6 +95,31 @@ import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/rou
         }
       </main>
     </div>
+
+    <!-- Logout confirmation popup -->
+    @if (showLogoutConfirm()) {
+      <div class="logout-overlay">
+        <div class="logout-dialog">
+          <span class="material-icons logout-icon">logout</span>
+          <h4>Cerrar sesión</h4>
+          
+          @if (hasActiveChat()) {
+            <p class="logout-text">
+              Tenés una conversación activa con el Asistente Virtual. Si cerrás sesión, perderás el progreso de tu consulta y el historial del chat.
+            </p>
+          } @else {
+            <p class="logout-text">
+              ¿Estás seguro de que deseas cerrar sesión en el sistema?
+            </p>
+          }
+          
+          <div class="logout-actions">
+            <button class="cancel-btn" (click)="cancelLogout()">Cancelar</button>
+            <button class="accept-btn" (click)="confirmLogout()">Cerrar sesión</button>
+          </div>
+        </div>
+      </div>
+    }
   `,
   styles: [`
     .home-layout {
@@ -247,6 +272,7 @@ import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/rou
       cursor: pointer;
       transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
       outline: none;
+      text-decoration: none;
     }
 
     /* Inactive tab button */
@@ -328,6 +354,125 @@ import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/rou
       font-family: var(--font-body);
       font-size: 14px;
     }
+
+    /* Logout Modal Styles */
+    .logout-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(51, 49, 67, 0.4);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: logoutFadeIn 0.2s ease-out;
+    }
+
+    @keyframes logoutFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .logout-dialog {
+      background-color: var(--color-bg-primary);
+      padding: 32px;
+      border-radius: 16px;
+      width: 400px;
+      max-width: 90%;
+      text-align: center;
+      box-shadow: var(--shadow-bot-chat);
+      border: 1px solid var(--color-border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      animation: logoutScaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes logoutScaleIn {
+      from {
+        opacity: 0;
+        transform: scale(0.9) translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+
+    .logout-icon {
+      font-size: 48px;
+      color: var(--bot-orange);
+      background-color: rgba(243, 153, 64, 0.1);
+      padding: 12px;
+      border-radius: 50%;
+    }
+
+    .logout-dialog h4 {
+      margin: 0;
+      font-size: 20px;
+      font-family: var(--font-heading);
+      color: var(--color-text-primary);
+      font-weight: 600;
+    }
+
+    .logout-text {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--color-text-muted);
+      font-family: var(--font-body);
+    }
+
+    .logout-actions {
+      display: flex;
+      gap: 12px;
+      width: 100%;
+      margin-top: 8px;
+      justify-content: center;
+    }
+
+    .logout-actions button {
+      flex: 1;
+      padding: 12px 24px;
+      border-radius: 24px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: var(--font-heading);
+      font-size: 14px;
+      transition: all 0.2s ease;
+    }
+
+    .logout-actions .cancel-btn {
+      background-color: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
+      color: var(--color-text-primary);
+    }
+
+    .logout-actions .cancel-btn:hover {
+      background-color: var(--color-border);
+      border-color: #d1e2e6;
+    }
+
+    .logout-actions .accept-btn {
+      background-color: var(--bot-orange);
+      color: white;
+      box-shadow: 0 4px 12px rgba(243, 153, 64, 0.3);
+    }
+
+    .logout-actions .accept-btn:hover {
+      background-color: #e28e3b;
+      box-shadow: 0 6px 16px rgba(243, 153, 64, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .logout-actions .accept-btn:active {
+      transform: translateY(0);
+    }
   `]
 })
 export class HomeComponent {
@@ -338,6 +483,7 @@ export class HomeComponent {
   currentUserRole = computed(() => this.authService.currentUser()?.role || '');
   hasTickets = computed(() => this.ticketService.hasTickets());
   activeCount = computed(() => this.ticketService.activeCount());
+  showLogoutConfirm = signal(false);
 
   constructor() {
     effect(() => {
@@ -359,7 +505,34 @@ export class HomeComponent {
   }
 
   onLogout(): void {
+    this.showLogoutConfirm.set(true);
+  }
+
+  cancelLogout(): void {
+    this.showLogoutConfirm.set(false);
+  }
+
+  confirmLogout(): void {
+    this.showLogoutConfirm.set(false);
     this.ticketService.clearTickets();
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem('hsi_chat_messages');
+      sessionStorage.removeItem('hsi_chat_open');
+    }
     this.authService.logout().subscribe();
+  }
+
+  hasActiveChat(): boolean {
+    if (typeof sessionStorage === 'undefined') return false;
+    const saved = sessionStorage.getItem('hsi_chat_messages');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) && parsed.length > 1;
+      } catch (e) {
+        return false;
+      }
+    }
+    return false;
   }
 }
