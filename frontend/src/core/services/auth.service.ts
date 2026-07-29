@@ -31,8 +31,8 @@ export class AuthService {
   }
 
   private restoreSession(): void {
-    const savedToken = localStorage.getItem('hsi_token');
-    const savedUser = localStorage.getItem('hsi_user');
+    const savedToken = sessionStorage.getItem('hsi_token');
+    const savedUser = sessionStorage.getItem('hsi_user');
     
     const isValidToken = savedToken && savedToken !== 'null' && savedToken !== 'undefined' && savedToken.trim() !== '';
     const isValidUser = savedUser && savedUser !== 'null' && savedUser !== 'undefined' && savedUser.trim() !== '';
@@ -80,8 +80,8 @@ export class AuthService {
             role: 'user'
           };
 
-          localStorage.setItem('hsi_token', userToken);
-          localStorage.setItem('hsi_user', JSON.stringify(userProfile));
+          sessionStorage.setItem('hsi_token', userToken);
+          sessionStorage.setItem('hsi_user', JSON.stringify(userProfile));
 
           this.token.set(userToken);
           this.currentUser.set(userProfile);
@@ -109,8 +109,8 @@ export class AuthService {
             role: 'agent'
           };
 
-          localStorage.setItem('hsi_token', userToken);
-          localStorage.setItem('hsi_user', JSON.stringify(userProfile));
+          sessionStorage.setItem('hsi_token', userToken);
+          sessionStorage.setItem('hsi_user', JSON.stringify(userProfile));
 
           this.token.set(userToken);
           this.currentUser.set(userProfile);
@@ -137,8 +137,8 @@ export class AuthService {
   }
 
   private clearSession(): void {
-    localStorage.removeItem('hsi_token');
-    localStorage.removeItem('hsi_user');
+    sessionStorage.removeItem('hsi_token');
+    sessionStorage.removeItem('hsi_user');
     this.token.set(null);
     this.currentUser.set(null);
     this.router.navigate(['/login']);

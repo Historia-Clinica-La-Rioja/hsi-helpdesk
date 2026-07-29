@@ -819,7 +819,7 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
 
   loadFaqs(): void {
     // Usamos la clave exacta que vimos en el navegador
-    const token = localStorage.getItem('hsi_token');
+    const token = sessionStorage.getItem('hsi_token');
 
     // Armamos el encabezado con el token
     const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);

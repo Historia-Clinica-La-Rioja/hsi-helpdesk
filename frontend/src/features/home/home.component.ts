@@ -29,17 +29,40 @@ import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/rou
         </div>
 
         <div class="sidebar-middle">
+          <!-- Mis Tickets -->
           <div 
             class="sidebar-item" 
-            [class.active]="currentUserRole() !== 'user' || hasTickets()"
+            [class.active]="isRouteActive('list')"
             [class.inactive]="currentUserRole() === 'user' && !hasTickets()"
             (click)="onHistoryIconClick()"
-            [title]="currentUserRole() !== 'user' ? 'Ver tickets de soporte (' + activeCount() + ' activos)' : (hasTickets() ? 'Ver mis tickets (' + activeCount() + ' activos)' : 'Aún no tenés tickets enviados')"
+            [title]="currentUserRole() !== 'user' ? 'Ver mis tickets (' + activeCount() + ' activos)' : (hasTickets() ? 'Ver mis tickets (' + activeCount() + ' activos)' : 'Aún no tenés tickets enviados')"
           >
             <span class="material-icons">chat</span>
             @if (activeCount() > 0) {
               <span class="notification-badge">{{ activeCount() }}</span>
             }
+          </div>
+
+          <!-- Crear nuevo ticket (User only) -->
+          @if (currentUserRole() === 'user') {
+            <div 
+              class="sidebar-item" 
+              [class.active]="isRouteActive('create')"
+              (click)="onCreateTicketClick()"
+              title="Crear un nuevo ticket"
+            >
+              <span class="material-icons">add_box</span>
+            </div>
+          }
+
+          <!-- Tickets archivados (Both User and Agent) -->
+          <div 
+            class="sidebar-item" 
+            [class.active]="isRouteActive('archived')"
+            (click)="onArchivedTicketsClick()"
+            title="Tickets archivados"
+          >
+            <span class="material-icons">archive</span>
           </div>
         </div>
 
@@ -124,7 +147,7 @@ import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/rou
   styles: [`
     .home-layout {
       display: flex;
-      min-height: 100vh;
+      height: 100vh;
       width: 100%;
       overflow: hidden;
     }
@@ -132,6 +155,8 @@ import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/rou
     /* Sidebar Navigation Styles */
     .sidebar {
       width: 64px;
+      height: 100vh;
+      box-sizing: border-box;
       background-color: #333143;
       display: flex;
       flex-direction: column;
@@ -167,7 +192,13 @@ import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/rou
       justify-content: center;
       position: relative;
       cursor: pointer;
+      color: var(--color-text-muted);
       transition: all 0.2s ease;
+    }
+
+    .sidebar-item:hover:not(.inactive):not(.active) {
+      color: white;
+      background-color: rgba(255,255,255,0.08);
     }
 
     .sidebar-item .material-icons {
@@ -496,12 +527,32 @@ export class HomeComponent {
 
   onHistoryIconClick(): void {
     if (this.currentUserRole() !== 'user' || this.hasTickets()) {
-      this.router.navigate(['/home/tickets']);
+      this.router.navigate(['/home/tickets'], { queryParams: { view: 'list' } });
     }
   }
 
+  onCreateTicketClick(): void {
+    this.router.navigate(['/home/tickets'], { queryParams: { view: 'create' } });
+  }
+
+  onArchivedTicketsClick(): void {
+    this.router.navigate(['/home/tickets'], { queryParams: { view: 'archived' } });
+  }
+
+  isRouteActive(viewParam: 'list' | 'create' | 'archived'): boolean {
+    if (!this.router.url.includes('/home/tickets')) return false;
+    
+    const urlTree = this.router.parseUrl(this.router.url);
+    const view = urlTree.queryParams['view'];
+    
+    if (viewParam === 'list') {
+      return (!view || view === 'list');
+    }
+    return view === viewParam;
+  }
+
   onChatbotCTAClick(): void {
-    this.router.navigate(['/home/tickets']);
+    this.router.navigate(['/home/tickets'], { queryParams: { view: 'list' } });
   }
 
   onLogout(): void {
