@@ -336,7 +336,7 @@ export interface Priority {
           
           <div class="separator"></div>
 
-          <div class="tickets-list" [class.agent-list]="currentUserRole() !== 'user'">
+          <div class="tickets-list" [class.agent-list]="currentUserRole() !== 'user' && innerViewMode() !== 'archived'">
             @if (ticketsList().length === 0) {
               <div class="empty-state">
                 <span class="material-icons">{{ innerViewMode() === 'archived' ? 'archive' : 'confirmation_number' }}</span>
@@ -401,7 +401,7 @@ export interface Priority {
                         <span class="time-elapsed-pill">{{ getElapsedText(ticket.created_at) }}</span>
 
                         <!-- Archive/Unarchive Action Button -->
-                        @if (ticket.status === 'resuelto') {
+                        @if (ticket.status === 'resuelto' && (currentUserRole() === 'user' || ticket.assigned_to === currentUserId())) {
                           @if (isTicketArchived(ticket.id)) {
                             <button 
                               class="archive-action-btn"
@@ -2865,7 +2865,17 @@ export class TicketsTabComponent implements OnInit {
   activeTickets = computed(() => {
     const all = this.ticketService.tickets();
     const archivedIds = this.archivedTicketIds();
-    return all.filter(t => !(t.status === 'resuelto' && archivedIds.includes(t.id)));
+    const role = this.currentUserRole();
+    const currentUserId = this.currentUserId();
+    return all.filter(t => {
+      if (t.status === 'resuelto' && archivedIds.includes(t.id)) {
+        if (role !== 'user') {
+          return t.assigned_to !== currentUserId;
+        }
+        return false;
+      }
+      return true;
+    });
   });
 
   readTicketIds = signal<string[]>([]);
@@ -3014,6 +3024,9 @@ export class TicketsTabComponent implements OnInit {
     if (this.innerViewMode() === 'archived') {
       const archivedIds = this.archivedTicketIds();
       let archivedFiltered = all.filter(t => t.status === 'resuelto' && archivedIds.includes(t.id));
+      if (role !== 'user') {
+        archivedFiltered = archivedFiltered.filter(t => t.assigned_to === currentUserId);
+      }
       if (query) {
         archivedFiltered = archivedFiltered.filter(t =>
           t.title.toLowerCase().includes(query) ||
@@ -3249,21 +3262,33 @@ export class TicketsTabComponent implements OnInit {
     this.initForm();
     this.initReadTickets();
 
-    // Load archived tickets
-    try {
-      const savedArchived = localStorage.getItem('hsi_archived_tickets');
-      if (savedArchived) {
-        this.archivedTicketIds.set(JSON.parse(savedArchived));
-      }
-    } catch (e) {
-      console.error('Error reading archived tickets:', e);
-    }
-
-    // Load last seen times when user changes
+    // Load last seen times and archived tickets when user changes
     effect(() => {
       const user = this.authService.currentUser();
       if (user) {
         this.initLastSeenTimes(user.id);
+        
+        // Load user-scoped archived tickets
+        try {
+          const savedArchived = localStorage.getItem(`hsi_archived_tickets_${user.id}`);
+          if (savedArchived) {
+            this.archivedTicketIds.set(JSON.parse(savedArchived));
+          } else {
+            // Check for legacy shared archived tickets to migrate/use
+            const legacyArchived = localStorage.getItem('hsi_archived_tickets');
+            if (legacyArchived) {
+              const legacyIds = JSON.parse(legacyArchived);
+              this.archivedTicketIds.set(legacyIds);
+              // Migrate it to scoped
+              localStorage.setItem(`hsi_archived_tickets_${user.id}`, legacyArchived);
+            } else {
+              this.archivedTicketIds.set([]);
+            }
+          }
+        } catch (e) {
+          console.error('Error reading archived tickets:', e);
+          this.archivedTicketIds.set([]);
+        }
       }
     });
 
@@ -3554,12 +3579,14 @@ export class TicketsTabComponent implements OnInit {
   }
 
   archiveTicket(ticketId: string): void {
+    const userId = this.currentUserId();
+    if (!userId) return;
     const current = this.archivedTicketIds();
     if (!current.includes(ticketId)) {
       const updated = [...current, ticketId];
       this.archivedTicketIds.set(updated);
       try {
-        localStorage.setItem('hsi_archived_tickets', JSON.stringify(updated));
+        localStorage.setItem(`hsi_archived_tickets_${userId}`, JSON.stringify(updated));
       } catch (e) {
         console.error('Error saving archived tickets:', e);
       }
@@ -3567,11 +3594,13 @@ export class TicketsTabComponent implements OnInit {
   }
 
   unarchiveTicket(ticketId: string): void {
+    const userId = this.currentUserId();
+    if (!userId) return;
     const current = this.archivedTicketIds();
     const updated = current.filter(id => id !== ticketId);
     this.archivedTicketIds.set(updated);
     try {
-      localStorage.setItem('hsi_archived_tickets', JSON.stringify(updated));
+      localStorage.setItem(`hsi_archived_tickets_${userId}`, JSON.stringify(updated));
     } catch (e) {
       console.error('Error saving archived tickets:', e);
     }
