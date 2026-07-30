@@ -3,6 +3,14 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 
+export interface Faq {
+  id: string;
+  label: string;
+  questions: string;
+  answers: string;
+  is_active: boolean;
+}
+
 export interface ChatMessage {
   id: string;
   sender: 'bot' | 'user' | 'agent';
@@ -684,28 +692,10 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
   }
 
   ngOnInit(): void {
-    // Ya no cargamos FAQs iniciales
   }
 
   ngAfterViewChecked(): void {
     this.scrollToBottom();
-  }
-
-  loadFaqs(): void {
-    // Usamos la clave exacta que vimos en el navegador
-    const token = sessionStorage.getItem('hsi_token');
-
-    // Armamos el encabezado con el token
-    const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
-
-    this.http.get<Faq[]>('/api/faqs', { headers }).subscribe({
-      next: (data) => {
-        this.faqs.set(data);
-      },
-      error: (err) => {
-        console.error('Error al cargar las FAQs:', err);
-      }
-    });
   }
 
   toggleChat(): void {
@@ -780,7 +770,8 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
     this.http.post<{ answer: string }>('/api/chatbot/ask', { question: input }, { headers }).subscribe({
       next: (res) => {
         this.isTyping.set(false);
-        this.addMessage('bot', res.answer);
+        const showCTA = res.answer.toLowerCase().includes('ticket');
+        this.addMessage('bot', res.answer, { isCTA: showCTA });
         setTimeout(() => this.scrollToBottom(), 50);
       },
       error: (err) => {

@@ -47,6 +47,16 @@ func main() {
 	iaService := services.NewIAService("128.201.239.37")
 	chatbotHandler := handlers.NewChatbotHandler(iaService, faqRepo)
 
+	go func() {
+		log.Println("⏳ Iniciando pre-calentamiento de la IA (Cargando modelo en RAM)...")
+		_, err := iaService.AskChatbot("ping_inicializacion", "")
+		if err != nil {
+			log.Printf("⚠️ Error en pre-calentamiento: %v\n", err)
+		} else {
+			log.Println("✅ IA cargada en memoria RAM y lista para responder al instante!")
+		}
+	}()
+
 	router := gin.Default()
 
 	// Register CORS middleware
