@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/models"
@@ -120,10 +121,32 @@ func (s *authService) AuthenticateUser(username, role, dni, password string) (st
 		if user.Password == nil {
 			return "", errors.New("credenciales inválidas")
 		}
-		err = bcrypt.CompareHashAndPassword([]byte(*user.Password), []byte(password))
-		if err != nil {
-			return "", errors.New("credenciales inválidas")
+
+		storedPassword := *user.Password
+		isHash := strings.HasPrefix(storedPassword, "$2a$") || strings.HasPrefix(storedPassword, "$2b$") || strings.HasPrefix(storedPassword, "$2y$")
+
+		if isHash {
+			err = bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(password))
+			if err != nil {
+				return "", errors.New("credenciales inválidas")
+			}
+		} else {
+			if storedPassword != password {
+				return "", errors.New("credenciales inválidas")
+			}
+
+			// Plaintext password matches, generate hash and update database
+			newHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+			if err != nil {
+				return "", fmt.Errorf("failed to hash password: %w", err)
+			}
+
+			err = s.userRepo.UpdatePassword(user.ID, string(newHash))
+			if err != nil {
+				return "", fmt.Errorf("failed to update password in DB: %w", err)
+			}
 		}
+
 		return jwt.GenerateToken(user.ID.Hex(), user.Role)
 
 	default:
