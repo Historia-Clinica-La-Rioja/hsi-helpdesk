@@ -691,6 +691,23 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
     this.scrollToBottom();
   }
 
+  loadFaqs(): void {
+    // Usamos la clave exacta que vimos en el navegador
+    const token = sessionStorage.getItem('hsi_token');
+
+    // Armamos el encabezado con el token
+    const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
+
+    this.http.get<Faq[]>('/api/faqs', { headers }).subscribe({
+      next: (data) => {
+        this.faqs.set(data);
+      },
+      error: (err) => {
+        console.error('Error al cargar las FAQs:', err);
+      }
+    });
+  }
+
   toggleChat(): void {
     this.isOpen.set(!this.isOpen());
     if (this.isOpen()) {

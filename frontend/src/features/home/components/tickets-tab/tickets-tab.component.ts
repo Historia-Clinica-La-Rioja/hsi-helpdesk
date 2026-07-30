@@ -9,6 +9,7 @@ import { TicketService, Ticket, TicketMessage } from '../../../../core/services/
 import { AuthService } from '../../../../core/services/auth.service';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { interval, Subscription } from 'rxjs';
+import { ActivatedRoute, Router } from '@angular/router';
 
 export interface Institution {
   _id: string;
@@ -48,17 +49,29 @@ export interface Priority {
               <div class="form-col">
                 <!-- Title -->
                 <div class="form-group">
-                  <label>Título del error o solicitud *</label>
+                  <div class="label-row" style="display: flex; justify-content: space-between; align-items: center;">
+                    <label>Título del error o solicitud *</label>
+                    <span class="char-counter" style="font-size: 11px; color: #90A4AE;">
+                      {{ ticketForm.get('title')?.value?.length || 0 }}/100
+                    </span>
+                  </div>
                   <div class="input-container">
                     <span class="material-icons input-icon">title</span>
                     <input 
                       type="text" 
                       formControlName="title" 
+                      maxlength="100"
                       placeholder="Ej: Error al firmar documento / cargar Historia Clínica"
                     />
                   </div>
                   @if (showError('title')) {
-                    <span class="error-text">El título es obligatorio</span>
+                    <span class="error-text">
+                      @if (ticketForm.get('title')?.hasError('required')) {
+                        El título es obligatorio
+                      } @else if (ticketForm.get('title')?.hasError('maxlength')) {
+                        El título no debe superar los 100 caracteres
+                      }
+                    </span>
                   }
                 </div>
 
@@ -145,6 +158,7 @@ export interface Priority {
                     @for (tag of systemTags(); track tag.id) {
                       <mat-chip-option 
                         [selected]="selectedTags().includes(tag.id)"
+                        [disabled]="!selectedTags().includes(tag.id) && selectedTags().length >= 5"
                         (selectionChange)="toggleTag(tag.id, $event.selected)"
                       >
                         {{ tag.name }}
@@ -153,7 +167,7 @@ export interface Priority {
                   </mat-chip-listbox>
                   @if (selectedTags().length === 0) {
                     <span class="error-text" style="display: block; margin-top: 4px;">Debes seleccionar al menos 1 etiqueta</span>
-                  } @else if (selectedTags().length > 5) {
+                  } @else if (selectedTags().length >= 5) {
                     <span class="error-text" style="display: block; margin-top: 4px;">Máximo 5 etiquetas permitidas</span>
                   }
                 </div>
@@ -216,19 +230,19 @@ export interface Priority {
             </div>
           </form>
         </div>
-      } @else if (innerViewMode() === 'list') {
+      } @else if (innerViewMode() === 'list' || innerViewMode() === 'archived') {
         <!-- List View (Mis Tickets / Tickets de Soporte) -->
         <div class="ticket-history-card">
           <div class="history-header">
-            <h2>{{ currentUserRole() === 'user' ? 'Mis tickets' : 'Panel de Agente' }}</h2>
-            @if (currentUserRole() === 'user') {
+            <h2>{{ innerViewMode() === 'archived' ? 'Tickets Archivados' : (currentUserRole() === 'user' ? 'Mis tickets' : 'Panel de Agente') }}</h2>
+            @if (currentUserRole() === 'user' && innerViewMode() !== 'archived') {
               <button class="new-ticket-btn" (click)="setViewMode('create')">
                 + Nuevo ticket
               </button>
             }
           </div>
 
-          @if (currentUserRole() !== 'user') {
+          @if (currentUserRole() !== 'user' && innerViewMode() !== 'archived') {
             <!-- 6 Stat Cards -->
             <div class="agent-stats-row">
               <div class="stat-card total" (click)="setStatusFilter('todos')" style="cursor: pointer;">
@@ -325,8 +339,14 @@ export interface Priority {
           <div class="tickets-list" [class.agent-list]="currentUserRole() !== 'user'">
             @if (ticketsList().length === 0) {
               <div class="empty-state">
-                <span class="material-icons">confirmation_number</span>
-                <p>{{ currentUserRole() === 'user' ? 'Aún no tenés tickets enviados.' : 'No se encontraron tickets de soporte.' }}</p>
+                <span class="material-icons">{{ innerViewMode() === 'archived' ? 'archive' : 'confirmation_number' }}</span>
+                <p>
+                  @if (innerViewMode() === 'archived') {
+                    No se encontraron tickets archivados.
+                  } @else {
+                    {{ currentUserRole() === 'user' ? 'Aún no tenés tickets enviados.' : 'No se encontraron tickets de soporte.' }}
+                  }
+                </p>
               </div>
             } @else {
               @for (ticket of ticketsList(); track ticket.id) {
@@ -379,6 +399,33 @@ export interface Priority {
 
                         <!-- Elapsed Time Pill -->
                         <span class="time-elapsed-pill">{{ getElapsedText(ticket.created_at) }}</span>
+
+                        <!-- Archive/Unarchive Action Button -->
+                        @if (ticket.status === 'resuelto') {
+                          @if (isTicketArchived(ticket.id)) {
+                            <button 
+                              class="archive-action-btn"
+                              (click)="unarchiveTicket(ticket.id); $event.stopPropagation();"
+                              title="Desarchivar ticket"
+                              style="background: transparent; border: none; cursor: pointer; color: #78909C; display: inline-flex; align-items: center; justify-content: center; padding: 4px; border-radius: 4px; transition: color 0.2s;"
+                              onmouseover="this.style.color='#00796B'"
+                              onmouseout="this.style.color='#78909C'"
+                            >
+                              <span class="material-icons" style="font-size: 20px;">unarchive</span>
+                            </button>
+                          } @else {
+                            <button 
+                              class="archive-action-btn"
+                              (click)="archiveTicket(ticket.id); $event.stopPropagation();"
+                              title="Archivar ticket"
+                              style="background: transparent; border: none; cursor: pointer; color: #78909C; display: inline-flex; align-items: center; justify-content: center; padding: 4px; border-radius: 4px; transition: color 0.2s;"
+                              onmouseover="this.style.color='#00796B'"
+                              onmouseout="this.style.color='#78909C'"
+                            >
+                              <span class="material-icons" style="font-size: 20px;">archive</span>
+                            </button>
+                          }
+                        }
                       </div>
                     </div>
 
@@ -462,7 +509,7 @@ export interface Priority {
         <!-- Detail View -->
         <div class="ticket-detail-card">
           <div class="detail-header">
-            <button class="back-btn" (click)="setViewMode('list')">
+            <button class="back-btn" (click)="setViewMode(previousListMode())">
               <span class="material-icons">arrow_back</span> Volver
             </button>
             <div class="detail-actions">
@@ -2809,6 +2856,17 @@ export class TicketsTabComponent implements OnInit {
   private destroyRef = inject(DestroyRef);
   private http = inject(HttpClient);
   private pollingSub?: Subscription;
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+
+  previousListMode = signal<'list' | 'archived'>('list');
+  archivedTicketIds = signal<string[]>([]);
+
+  activeTickets = computed(() => {
+    const all = this.ticketService.tickets();
+    const archivedIds = this.archivedTicketIds();
+    return all.filter(t => !(t.status === 'resuelto' && archivedIds.includes(t.id)));
+  });
 
   readTicketIds = signal<string[]>([]);
   selectedStatusFilter = signal<'todos' | 'abierto' | 'en_progreso' | 'reabierto' | 'transferido' | 'resuelto'>('todos');
@@ -2890,17 +2948,29 @@ export class TicketsTabComponent implements OnInit {
   });
 
   // Agent dynamic statistics cards
-  statsTotal = computed(() => this.ticketService.tickets().length);
-  statsAbiertos = computed(() => this.ticketService.tickets().filter(t => t.status === 'abierto').length);
-  statsProgreso = computed(() => this.ticketService.tickets().filter(t => t.status === 'en_progreso').length);
-  statsReabiertos = computed(() => this.ticketService.tickets().filter(t => t.status === 'reabierto').length);
-  statsTransferidos = computed(() => this.ticketService.tickets().filter(t => t.status === 'transferido').length);
-  statsResueltos = computed(() => this.ticketService.tickets().filter(t => t.status === 'resuelto').length);
+  statsTotal = computed(() => this.activeTickets().length);
+  statsAbiertos = computed(() => this.activeTickets().filter(t => t.status === 'abierto' && !t.assigned_to).length);
+  statsProgreso = computed(() => {
+    const currentUserId = this.currentUserId();
+    return this.activeTickets().filter(t => t.status === 'en_progreso' && t.assigned_to === currentUserId).length;
+  });
+  statsReabiertos = computed(() => {
+    const currentUserId = this.currentUserId();
+    return this.activeTickets().filter(t => t.status === 'reabierto' && t.assigned_to === currentUserId).length;
+  });
+  statsTransferidos = computed(() => {
+    const currentUserId = this.currentUserId();
+    return this.activeTickets().filter(t => t.status === 'transferido' && t.assigned_to === currentUserId).length;
+  });
+  statsResueltos = computed(() => {
+    const currentUserId = this.currentUserId();
+    return this.activeTickets().filter(t => t.status === 'resuelto' && t.assigned_to === currentUserId).length;
+  });
 
 
   @Output() ticketSelected = new EventEmitter<Ticket>();
 
-  innerViewMode = signal<'create' | 'list' | 'detail'>('create');
+  innerViewMode = signal<'create' | 'list' | 'detail' | 'archived'>('create');
 
   selectedTicket = signal<Ticket | null>(null);
   currentUserRole = computed(() => this.authService.currentUser()?.role || '');
@@ -2941,7 +3011,24 @@ export class TicketsTabComponent implements OnInit {
     const filter = this.selectedStatusFilter();
     const currentUserId = this.authService.currentUser()?.id || '';
 
-    let filtered = all;
+    if (this.innerViewMode() === 'archived') {
+      const archivedIds = this.archivedTicketIds();
+      let archivedFiltered = all.filter(t => t.status === 'resuelto' && archivedIds.includes(t.id));
+      if (query) {
+        archivedFiltered = archivedFiltered.filter(t =>
+          t.title.toLowerCase().includes(query) ||
+          t.description.toLowerCase().includes(query) ||
+          t.institution.toLowerCase().includes(query)
+        );
+      }
+      return [...archivedFiltered].sort((a, b) => {
+        const dateA = a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_at).getTime();
+        const dateB = b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_at).getTime();
+        return dateB - dateA;
+      });
+    }
+
+    let filtered = this.activeTickets();
 
     if (role === 'user') {
       if (query) {
@@ -3042,7 +3129,7 @@ export class TicketsTabComponent implements OnInit {
     if (ticket) {
       const userRole = user.role;
       const isOwnerOrAssigned = (userRole === 'user' && ticket.user_id === user.username) ||
-                                 (userRole !== 'user' && ticket.assigned_to === user.id);
+        (userRole !== 'user' && ticket.assigned_to === user.id);
       if (!isOwnerOrAssigned) {
         // If a curious agent is viewing a ticket that is not assigned to them, do not mark as seen
         return;
@@ -3071,7 +3158,7 @@ export class TicketsTabComponent implements OnInit {
     const lastMsg = ticket.messages[ticket.messages.length - 1];
     const userRole = this.currentUserRole();
     const currentUserId = this.authService.currentUser()?.id || '';
-    
+
     if (userRole === 'user') {
       // Regular user: any message not from 'user' is a response
       const isResponse = lastMsg.role !== 'user';
@@ -3162,6 +3249,16 @@ export class TicketsTabComponent implements OnInit {
     this.initForm();
     this.initReadTickets();
 
+    // Load archived tickets
+    try {
+      const savedArchived = localStorage.getItem('hsi_archived_tickets');
+      if (savedArchived) {
+        this.archivedTicketIds.set(JSON.parse(savedArchived));
+      }
+    } catch (e) {
+      console.error('Error reading archived tickets:', e);
+    }
+
     // Load last seen times when user changes
     effect(() => {
       const user = this.authService.currentUser();
@@ -3204,14 +3301,14 @@ export class TicketsTabComponent implements OnInit {
       if (hasNewNotification) {
         this.toastMessage.set(toastMsg);
         this.toastTicketId.set(toastId);
-        
+
         // Auto-close toast after 6 seconds
         setTimeout(() => {
           if (this.toastTicketId() === toastId) {
             this.toastMessage.set(null);
             this.toastTicketId.set(null);
           }
-        }, 6000);
+        }, 15000);
       }
     });
 
@@ -3278,20 +3375,34 @@ export class TicketsTabComponent implements OnInit {
     this.loadPriorities();
     this.loadTags();
 
+    this.route.queryParams.subscribe(params => {
+      const view = params['view'];
+      if (view === 'create') {
+        this.setViewMode('create');
+      } else if (view === 'archived') {
+        this.setViewMode('archived');
+      } else if (view === 'list') {
+        this.setViewMode('list');
+      }
+    });
+
     const user = this.authService.currentUser();
     if (user) {
       // Disparamos la carga de tickets
       this.ticketService.loadTicketsForUser(user.username);
 
-      if (user.role !== 'user') {
-        this.innerViewMode.set('list');
-      } else {
-        // Los Usuarios normales arrancan en "crear". 
-        // Salvo que ya tengan tickets cacheados en el servicio, en cuyo caso ven la lista.
-        if (this.ticketService.tickets().length > 0) {
+      const urlView = this.route.snapshot.queryParams['view'];
+      if (!urlView) {
+        if (user.role !== 'user') {
           this.innerViewMode.set('list');
         } else {
-          this.innerViewMode.set('create');
+          // Los Usuarios normales arrancan en "crear". 
+          // Salvo que ya tengan tickets cacheados en el servicio, en cuyo caso ven la lista.
+          if (this.ticketService.tickets().length > 0) {
+            this.innerViewMode.set('list');
+          } else {
+            this.innerViewMode.set('create');
+          }
         }
       }
     }
@@ -3333,7 +3444,7 @@ export class TicketsTabComponent implements OnInit {
               })) : []
             };
             this.selectedTicket.set(parsed);
-            
+
             // Mark as seen immediately since the user is in detail view of this ticket
             const lastMsgTime = parsed.messages && parsed.messages.length > 0
               ? parsed.messages[parsed.messages.length - 1].created_at
@@ -3356,7 +3467,7 @@ export class TicketsTabComponent implements OnInit {
 
   loadInstitutions() {
     // Usamos la clave exacta que vimos en el navegador
-    const token = localStorage.getItem('hsi_token');
+    const token = sessionStorage.getItem('hsi_token');
 
     // Armamos el encabezado con el token
     const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
@@ -3372,7 +3483,7 @@ export class TicketsTabComponent implements OnInit {
   }
 
   loadPriorities() {
-    const token = localStorage.getItem('hsi_token');
+    const token = sessionStorage.getItem('hsi_token');
     const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
 
     this.http.get<Priority[]>('/api/priorities', { headers }).subscribe({
@@ -3417,18 +3528,57 @@ export class TicketsTabComponent implements OnInit {
 
   private initForm(): void {
     this.ticketForm = this.fb.group({
-      title: ['', Validators.required],
+      title: ['', [Validators.required, Validators.maxLength(100)]],
       email: ['', [Validators.required, Validators.email]],
       institution: ['', Validators.required],
       description: ['', Validators.required]
     });
   }
 
-  setViewMode(mode: 'create' | 'list' | 'detail'): void {
+  setViewMode(mode: 'create' | 'list' | 'detail' | 'archived'): void {
+    if (mode === 'list' || mode === 'archived') {
+      this.previousListMode.set(mode);
+    }
     this.innerViewMode.set(mode);
     if (mode !== 'detail') {
       this.isEditing.set(false);
+      const currentUrlView = this.route.snapshot.queryParams['view'];
+      if (currentUrlView !== mode) {
+        this.router.navigate([], {
+          relativeTo: this.route,
+          queryParams: { view: mode },
+          queryParamsHandling: 'merge'
+        });
+      }
     }
+  }
+
+  archiveTicket(ticketId: string): void {
+    const current = this.archivedTicketIds();
+    if (!current.includes(ticketId)) {
+      const updated = [...current, ticketId];
+      this.archivedTicketIds.set(updated);
+      try {
+        localStorage.setItem('hsi_archived_tickets', JSON.stringify(updated));
+      } catch (e) {
+        console.error('Error saving archived tickets:', e);
+      }
+    }
+  }
+
+  unarchiveTicket(ticketId: string): void {
+    const current = this.archivedTicketIds();
+    const updated = current.filter(id => id !== ticketId);
+    this.archivedTicketIds.set(updated);
+    try {
+      localStorage.setItem('hsi_archived_tickets', JSON.stringify(updated));
+    } catch (e) {
+      console.error('Error saving archived tickets:', e);
+    }
+  }
+
+  isTicketArchived(ticketId: string): boolean {
+    return this.archivedTicketIds().includes(ticketId);
   }
 
   showError(field: string): boolean {
@@ -3453,6 +3603,9 @@ export class TicketsTabComponent implements OnInit {
   toggleTag(tag: string, selected: boolean): void {
     const current = this.selectedTags();
     if (selected) {
+      if (current.length >= 5) {
+        return;
+      }
       this.selectedTags.set([...current, tag]);
     } else {
       this.selectedTags.set(current.filter(t => t !== tag));

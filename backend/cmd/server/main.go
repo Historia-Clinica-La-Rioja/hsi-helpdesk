@@ -38,8 +38,14 @@ func main() {
 	// Inicialización de Prioridades
 	priorityRepo := repositories.NewPriorityRepository(db)
 	priorityHandler := handlers.NewPriorityHandler(priorityRepo)
+	
+	// Inicialización de FAQs
 	faqRepo := repositories.NewFaqRepository(db)
 	faqHandler := handlers.NewFaqHandler(faqRepo)
+
+	// 👇 NUEVO: Inicialización del servicio de IA (Ollama)
+	iaService := services.NewIAService("128.201.239.37")
+	chatbotHandler := handlers.NewChatbotHandler(iaService, faqRepo)
 
 	router := gin.Default()
 
@@ -65,7 +71,7 @@ func main() {
 			auth.POST("/logout", authHandler.Logout)
 		}
 
-		// 👇 SEGURIDAD: Grupo de rutas protegidas
+		// SEGURIDAD: Grupo de rutas protegidas
 		// Todo lo que esté adentro de este bloque requiere un token JWT válido
 		protected := api.Group("/")
 		protected.Use(middleware.AuthMiddleware())
@@ -73,6 +79,9 @@ func main() {
 			// Protegemos estas rutas para evitar fuga de información (data scraping)
 			protected.GET("/institutions", institutionHandler.GetInstitutions)
 			protected.GET("/faqs", faqHandler.GetFaqs)
+			
+			// 👇 NUEVO: Endpoint para hacer preguntas al Chatbot con IA
+			protected.POST("/chatbot/ask", chatbotHandler.HandleAsk)
 
 			tickets := protected.Group("/tickets")
 			{
@@ -105,7 +114,6 @@ func main() {
 	router.NoRoute(func(c *gin.Context) {
 		path := c.Request.URL.Path
 
-		// . Si la ruta buscada empieza con /api, es un error del backend real (404)
 		if strings.HasPrefix(path, "/api") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Endpoint not found"})
 			return
@@ -116,7 +124,7 @@ func main() {
 			return
 		}
 
-		// . SPA Fallback: Para cualquier otra ruta (ej: /login, /tickets), 
+		// SPA Fallback: Para cualquier otra ruta (ej: /login, /tickets)
 		c.File("./public/index.html")
 	})
 
