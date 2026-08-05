@@ -48,7 +48,7 @@ export const routes: Routes = [
       },
       {
         path: '',
-        redirectTo: 'about',
+        redirectTo: 'tickets',
         pathMatch: 'full'
       }
     ]

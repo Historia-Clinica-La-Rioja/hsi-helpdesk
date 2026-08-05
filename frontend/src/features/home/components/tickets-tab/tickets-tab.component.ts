@@ -718,7 +718,7 @@ export interface Priority {
                             <button 
                               type="button" 
                               class="resolve-action-btn"
-                              (click)="changeStatusQuick(ticket.id, 'resuelto')"
+                              (click)="openResolveConfirmation(ticket.id)"
                             >
                               <span class="material-icons" style="font-size: 16px; vertical-align: middle;">task_alt</span>
                               Resolver Ticket
@@ -997,6 +997,32 @@ export interface Priority {
         </div>
       }
 
+      <!-- Resolve Confirmation Modal -->
+      @if (showResolveConfirmModal()) {
+        <div class="confirm-modal-overlay">
+          <div class="confirm-modal-container">
+            <div class="confirm-modal-content">
+              <span class="material-icons confirm-modal-icon">task_alt</span>
+              <h3>¿Todo Listo?</h3>
+              <p>Al confirmar, el estado de este ticket cambiará a "Resuelto".</p>
+            </div>
+            
+            <div class="confirm-modal-actions">
+              <button type="button" class="cancel-confirm-btn" (click)="closeResolveConfirmation()">
+                Cancelar
+              </button>
+              <button 
+                type="button" 
+                class="accept-confirm-btn" 
+                (click)="confirmResolve()"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+
       <!-- Popups section -->
       @if (showCreateSuccess()) {
         <div class="success-overlay">
@@ -1008,6 +1034,21 @@ export interface Priority {
             </p>
             <div class="success-actions">
               <button class="accept-btn" (click)="showCreateSuccess.set(false)">Entendido</button>
+            </div>
+          </div>
+        </div>
+      }
+
+      @if (showTransferSuccess()) {
+        <div class="success-overlay">
+          <div class="success-dialog">
+            <span class="material-icons success-icon" style="color: var(--color-success);">check_circle</span>
+            <h4>Ticket transferido correctamente</h4>
+            <p class="clarification-text">
+              El ticket ha sido asignado al nuevo agente y se ha registrado el motivo en el historial del ticket.
+            </p>
+            <div class="success-actions">
+              <button class="accept-btn" (click)="showTransferSuccess.set(false)">Entendido</button>
             </div>
           </div>
         </div>
@@ -1373,7 +1414,7 @@ export interface Priority {
     }
 
     .tickets-list.agent-list {
-      max-height: calc(100vh - 480px);
+      max-height: calc(100vh - 380px);
     }
 
     .ticket-item {
@@ -2304,7 +2345,17 @@ export interface Priority {
       width: 100%;
       cursor: pointer;
       appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
       padding-right: 20px;
+    }
+
+    .user-filter-controls select option {
+      background-color: var(--color-bg-primary);
+      color: var(--color-text-primary);
+      font-family: var(--font-body);
+      font-size: 13px;
+      padding: 8px;
     }
 
     .user-filter-controls .select-wrapper::after {
@@ -2315,6 +2366,12 @@ export interface Priority {
       color: var(--color-text-muted);
       font-size: 16px;
       pointer-events: none;
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), color 0.25s ease;
+    }
+
+    .user-filter-controls .select-wrapper:focus-within::after {
+      transform: rotate(180deg);
+      color: var(--color-accent-teal);
     }
 
     .user-filter-controls .clear-filters-btn {
@@ -3091,6 +3148,131 @@ export interface Priority {
         opacity: 1;
       }
     }
+
+    /* Resolve Confirmation Modal Styles */
+    .confirm-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(51, 49, 67, 0.4);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1001;
+      backdrop-filter: blur(4px);
+      animation: modalFadeIn 0.2s ease-out;
+    }
+    
+    @keyframes modalFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    .confirm-modal-container {
+      background-color: #ffffff;
+      width: 380px;
+      max-width: 90%;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(51, 49, 67, 0.15);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      animation: modalScaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      border: 1px solid var(--color-border);
+    }
+    
+    @keyframes modalScaleIn {
+      from {
+        opacity: 0;
+        transform: scale(0.95) translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+    
+    .confirm-modal-content {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .confirm-modal-icon {
+      font-size: 48px;
+      color: var(--color-success);
+      background-color: rgba(76, 175, 130, 0.1);
+      padding: 12px;
+      border-radius: 50%;
+    }
+    
+    .confirm-modal-content h3 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--color-text-primary);
+      margin: 0;
+      font-family: var(--font-heading);
+    }
+    
+    .confirm-modal-content p {
+      font-size: 13.5px;
+      color: var(--color-text-muted);
+      line-height: 1.5;
+      margin: 0;
+      font-family: var(--font-body);
+    }
+    
+    .confirm-modal-actions {
+      display: flex;
+      gap: 12px;
+      width: 100%;
+      margin-top: 8px;
+    }
+    
+    .confirm-modal-actions button {
+      flex: 1;
+      height: 40px;
+      border-radius: 20px;
+      font-weight: 600;
+      font-size: 13.5px;
+      font-family: var(--font-heading);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: none;
+      outline: none;
+    }
+    
+    .confirm-modal-actions .cancel-confirm-btn {
+      background-color: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
+      color: var(--color-text-primary);
+    }
+    
+    .confirm-modal-actions .cancel-confirm-btn:hover {
+      background-color: var(--color-border);
+    }
+    
+    .confirm-modal-actions .accept-confirm-btn {
+      background-color: var(--color-success);
+      color: white;
+      box-shadow: 0 4px 12px rgba(76, 175, 130, 0.25);
+    }
+    
+    .confirm-modal-actions .accept-confirm-btn:hover {
+      background-color: #3e966e;
+      box-shadow: 0 6px 16px rgba(76, 175, 130, 0.35);
+      transform: translateY(-1px);
+    }
+    
+    .confirm-modal-actions .accept-confirm-btn:active {
+      transform: translateY(0);
+    }
   `]
 })
 
@@ -3106,6 +3288,8 @@ export class TicketsTabComponent implements OnInit {
 
   previousListMode = signal<'list' | 'archived'>('list');
   archivedTicketIds = signal<string[]>([]);
+  showResolveConfirmModal = signal(false);
+  ticketToResolveId = signal('');
 
   activeTickets = computed(() => {
     const all = this.ticketService.tickets();
@@ -3154,7 +3338,7 @@ export class TicketsTabComponent implements OnInit {
         }
       }
     }
-    
+
     const uniqueTags: string[] = [];
     const seen = new Set<string>();
     for (const tag of tagsSet) {
@@ -3175,9 +3359,9 @@ export class TicketsTabComponent implements OnInit {
   hasActiveUserFilters = computed(() => {
     const isArchived = this.innerViewMode() === 'archived';
     return this.searchQuery() !== '' ||
-           this.userSort() !== 'recent' ||
-           (!isArchived && this.userStatusFilter() !== 'all') ||
-           this.userTagFilter() !== 'all';
+      this.userSort() !== 'recent' ||
+      (!isArchived && this.userStatusFilter() !== 'all') ||
+      this.userTagFilter() !== 'all';
   });
 
   clearUserFilters(): void {
@@ -3344,7 +3528,7 @@ export class TicketsTabComponent implements OnInit {
       if (role !== 'user') {
         archivedFiltered = archivedFiltered.filter(t => t.assigned_to === currentUserId);
       }
-      
+
       if (role === 'user') {
         if (query) {
           archivedFiltered = archivedFiltered.filter(t =>
@@ -3359,7 +3543,7 @@ export class TicketsTabComponent implements OnInit {
             t.tags.some(tag => this.cleanTagName(tag) === cleanFilter)
           );
         }
-        
+
         const sortVal = this.userSort();
         return [...archivedFiltered].sort((a, b) => {
           if (sortVal === 'oldest') {
@@ -3409,7 +3593,7 @@ export class TicketsTabComponent implements OnInit {
           t.description.toLowerCase().includes(query)
         );
       }
-      
+
       const statusFilter = this.userStatusFilter();
       if (statusFilter === 'open') {
         filtered = filtered.filter(t => t.status === 'abierto');
@@ -3647,6 +3831,7 @@ export class TicketsTabComponent implements OnInit {
   // Popups signals
   showCreateSuccess = signal(false);
   showReopenInfo = signal(false);
+  showTransferSuccess = signal(false);
 
   // Comments signals
   newCommentText = '';
@@ -3667,7 +3852,7 @@ export class TicketsTabComponent implements OnInit {
       const user = this.authService.currentUser();
       if (user) {
         this.initLastSeenTimes(user.id);
-        
+
         // Load user-scoped archived tickets
         try {
           const savedArchived = localStorage.getItem(`hsi_archived_tickets_${user.id}`);
@@ -4426,7 +4611,7 @@ export class TicketsTabComponent implements OnInit {
           // De-duplicate tags by name (case-insensitive and removing accents)
           const seen = new Set<string>();
           const uniqueTags: any[] = [];
-          
+
           for (const tag of tags) {
             const cleaned = this.cleanTagName(tag.name);
             if (!seen.has(cleaned)) {
@@ -4516,11 +4701,30 @@ export class TicketsTabComponent implements OnInit {
         };
         this.selectedTicket.set(parsed);
         this.closeTransferModal();
+        this.showTransferSuccess.set(true);
       },
       error: (err) => {
         console.error('Error transferring ticket:', err);
       }
     });
+  }
+
+  openResolveConfirmation(ticketId: string): void {
+    this.ticketToResolveId.set(ticketId);
+    this.showResolveConfirmModal.set(true);
+  }
+
+  closeResolveConfirmation(): void {
+    this.showResolveConfirmModal.set(false);
+    this.ticketToResolveId.set('');
+  }
+
+  confirmResolve(): void {
+    const id = this.ticketToResolveId();
+    if (id) {
+      this.changeStatusQuick(id, 'resuelto');
+    }
+    this.closeResolveConfirmation();
   }
 }
 
