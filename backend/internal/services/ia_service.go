@@ -19,10 +19,9 @@ type iaService struct {
 	client    *http.Client
 }
 
-// 👇 ACÁ ESTABA EL ERROR: Faltaba declarar NumPredict en esta estructura
 type OllamaOptions struct {
 	NumCtx     int `json:"num_ctx,omitempty"`
-	NumPredict int `json:"num_predict,omitempty"` // 👈 Ahora sí está declarado
+	NumPredict int `json:"num_predict,omitempty"`
 }
 
 type OllamaRequest struct {
@@ -49,21 +48,17 @@ func NewIAService(vmIP string) IAService {
 }
 
 func (s *iaService) AskChatbot(question string, context string) (string, error) {
-	// SYSTEM PROMPT CON REGLA DE CORTE ABSOLUTO
-	systemPrompt := fmt.Sprintf(`Eres el asistente de soporte técnico del sistema HSI (Historia Clínica Salud).
+	systemPrompt := fmt.Sprintf(`Eres "Asistente HSI", el soporte técnico oficial. 
+Tu única misión es transmitir la información de las guías oficiales de forma íntegra.
 
-REGLA DE ORO Y RECHAZO:
-- Si el usuario pregunta sobre cualquier tema ajeno al sistema HSI (deportes, fútbol, clima, historia, cultura general, chistes, etc.), tu ÚNICA respuesta debe ser:
-"Disculpá, solo puedo responder consultas sobre el uso del sistema HSI."
-- Queda TOTALMENTE PROHIBIDO responder o dar datos sobre la pregunta fuera de tema.
-
-INFORMACIÓN OFICIAL HSI:
+BASE DE CONOCIMIENTO:
 %s
 
 INSTRUCCIONES DE RESPUESTA:
-1. Si la pregunta es sobre el sistema HSI y está en la INFO, responde usando esa información.
-2. Si es un problema del sistema HSI que NO figura en la INFO, pide amablemente que creen un Ticket de soporte.
-3. Respuestas breves y profesionales.`, context)
+1. Busca la solución en la BASE DE CONOCIMIENTO.
+2. Si está ahí, TRANSCRIBE LA RESPUESTA COMPLETA, PALABRA POR PALABRA. Incluye todos los números, pasos y aclaraciones finales. Tu respuesta debe ser un clon del texto original.
+3. Si el problema NO está en la base de conocimiento, responde exactamente esto: "Ese inconveniente no figura en mis guías. Por favor, creá un Ticket indicando: Establecimiento, Módulo y Descripción del error."
+4. Si la pregunta NO es sobre el sistema HSI (deportes, clima, etc), responde: "Disculpá, solo puedo responder consultas sobre el uso del sistema HSI."`, context)
 
 	reqBody := OllamaRequest{
 		Model:     s.modelName,
@@ -73,7 +68,7 @@ INSTRUCCIONES DE RESPUESTA:
 		KeepAlive: "1h",
 		Options: OllamaOptions{
 			NumCtx:     1024,
-			NumPredict: 400, //
+			NumPredict: 400,
 		},
 	}
 

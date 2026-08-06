@@ -1,9 +1,10 @@
-import { Component, Output, EventEmitter, signal, ElementRef, ViewChild, AfterViewChecked, OnInit, inject, effect } from '@angular/core';
+import { Component, Output, EventEmitter, signal, ElementRef, ViewChild, AfterViewChecked, OnInit, inject, effect, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { HsiRobotLogoComponent } from '../../shared/components/hsi-robot-logo/hsi-robot-logo.component';
 import { TicketService } from '../../core/services/ticket.service';
+import { Router } from '@angular/router';
 
 export interface Faq {
   id: string;
@@ -21,6 +22,7 @@ export interface ChatMessage {
   isCTA?: boolean;
   isEscalation?: boolean;
   isEscalationPrompt?: boolean;
+  options?: any[];
 }
 
 @Component({
@@ -106,7 +108,7 @@ export interface ChatMessage {
                     'escalation-bubble': msg.isEscalation
                   }"
                 >
-                  <p>{{ msg.content }}</p>
+                  <p style="white-space: pre-wrap;">{{ msg.content }}</p>
                   
                   @if (msg.isCTA) {
                     <button class="cta-btn" (click)="triggerCTA()">
@@ -119,9 +121,21 @@ export interface ChatMessage {
                       👤 Hablar con un agente
                     </button>
                   }
+
+                  @if (msg.options && msg.options.length > 0) {
+                    <div class="faq-options-container" style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
+                      @for (faq of msg.options; track faq.id) {
+                        <button 
+                          (click)="selectOption(faq)" 
+                          style="background-color: #EBF4FD; color: var(--bot-blue); border: 1px solid #D6E9FC; border-radius: 8px; padding: 8px; text-align: left; cursor: pointer; font-family: var(--font-body); font-size: 13px; transition: all 0.2s;">
+                          {{ faq.questions }}
+                        </button>
+                      }
+                    </div>
+                  }
                 </div>
               </div> 
-            } 
+            }
 
             @if (isTyping()) {
               <div class="message-row bot">
@@ -646,10 +660,10 @@ export interface ChatMessage {
   `]
 })
 export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
-  @Output() navigateToTickets = new EventEmitter<void>();
   @ViewChild('scrollContainer') private scrollContainer!: ElementRef;
   @ViewChild('inputTextarea') private inputTextarea!: ElementRef;
-
+  private router = inject(Router);
+  failedAttempts = 0;
   private http = inject(HttpClient);
   private ticketService = inject(TicketService);
 
@@ -759,31 +773,49 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
     if (!input || this.isTyping()) return;
 
     this.userInput = '';
-
-    // 1. Agregamos el mensaje del usuario a la vista
     this.addMessage('user', input);
     this.isTyping.set(true);
     setTimeout(() => this.scrollToBottom(), 50);
 
-    // 2. Preparamos la cabecera de autenticación
-    const token = sessionStorage.getItem('hsi_token'); // ✅ AHORA SÍ LO VA A ENCONTRAR
+    const token = sessionStorage.getItem('hsi_token');
     const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
 
-    // 3. Enviamos la petición POST al nuevo endpoint de la IA
-    this.http.post<{ answer: string }>('/api/chatbot/ask', { question: input }, { headers }).subscribe({
+    // 2. Enviamos la pregunta junto con el número de intentos fallidos acumulados
+    this.http.post<{ answer: string, isCTA: boolean, options: any[], failedAttempts: number }>(
+      '/api/chatbot/ask', 
+      { question: input, failedAttempts: this.failedAttempts }, 
+      { headers }
+    ).subscribe({
       next: (res) => {
         this.isTyping.set(false);
-        const showCTA = res.answer.toLowerCase().includes('ticket');
-        this.addMessage('bot', res.answer, { isCTA: showCTA });
+        
+        // 3. Actualizamos el contador local con lo que devuelve el backend
+        this.failedAttempts = res.failedAttempts ?? 0;
+
+        this.addMessage('bot', res.answer, { isCTA: res.isCTA, options: res.options });
         setTimeout(() => this.scrollToBottom(), 50);
       },
       error: (err) => {
-        console.error('Error al consultar IA:', err);
+        console.error('Error al consultar el chatbot:', err);
         this.isTyping.set(false);
         this.addMessage('bot', 'Tuve un inconveniente al procesar tu consulta. Por favor, intentá nuevamente o creá un ticket de soporte.', { isCTA: true });
         setTimeout(() => this.scrollToBottom(), 50);
       }
     });
+  }
+
+  selectOption(faq: any): void {
+    this.failedAttempts = 0;
+
+    this.addMessage('user', faq.questions);
+    this.isTyping.set(true);
+    setTimeout(() => this.scrollToBottom(), 50);
+
+    setTimeout(() => {
+      this.isTyping.set(false);
+      this.addMessage('bot', faq.answers);
+      setTimeout(() => this.scrollToBottom(), 50);
+    }, 600);
   }
 
   triggerEscalation(): void {
@@ -827,7 +859,7 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
 
   triggerCTA(): void {
     this.closeChat();
-    this.navigateToTickets.emit();
+    this.router.navigate(['/home/tickets'], { queryParams: { view: 'create' } });
   }
 
   private scrollToBottom(): void {

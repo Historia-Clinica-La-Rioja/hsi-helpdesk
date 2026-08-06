@@ -5,27 +5,25 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/models"
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/repositories"
-	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/services"
+	"github.com/gin-gonic/gin"
 )
 
 type ChatbotHandler struct {
-	iaService services.IAService
-	faqRepo   repositories.FaqRepository
+	faqRepo repositories.FaqRepository
 }
 
-func NewChatbotHandler(ia services.IAService, faqRepo repositories.FaqRepository) *ChatbotHandler {
+func NewChatbotHandler(faqRepo repositories.FaqRepository) *ChatbotHandler {
 	return &ChatbotHandler{
-		iaService: ia,
-		faqRepo:   faqRepo,
+		faqRepo: faqRepo,
 	}
 }
 
 func (h *ChatbotHandler) HandleAsk(c *gin.Context) {
 	var body struct {
-		Question string `json:"question"`
+		Question       string `json:"question"`
+		FailedAttempts int    `json:"failedAttempts"`
 	}
 
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -33,34 +31,105 @@ func (h *ChatbotHandler) HandleAsk(c *gin.Context) {
 		return
 	}
 
-	// 1. Buscamos TODAS las FAQs de Mongo (tarda 0.005 segundos)
-	allFaqs, err := h.faqRepo.GetActiveFaqs()
-	var contextoFAQ string
-
-	if err == nil && len(allFaqs) > 0 {
-		// 2. Filtramos y armamos el contexto SOLO con las relevantes
-		contextoFAQ = h.filtrarFaqsRelevantes(body.Question, allFaqs)
-	}
-
-	// 3. Llamamos a Ollama pasando el contexto filtrado (Súper liviano)
-	answer, err := h.iaService.AskChatbot(body.Question, contextoFAQ)
-	if err != nil {
-		fmt.Println("❌ ERROR REAL DE OLLAMA:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "El asistente IA no está disponible en este momento."})
+	// 👇 NUEVO: 1. Interceptamos si es solo un saludo antes de buscar en Mongo
+	if h.esSaludo(body.Question) {
+		c.JSON(http.StatusOK, gin.H{
+			"answer":         "¡Hola! 👋 Soy el Asistente virtual de HSI. ¿En qué te puedo ayudar hoy? Podés preguntarme sobre uso de módulos, agendas, errores frecuentes o configuraciones.",
+			"isCTA":          false,
+			"options":        []models.Faq{},
+			"failedAttempts": 0, // Reiniciamos el contador por si venía fallando
+		})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"answer": answer})
+	allFaqs, err := h.faqRepo.GetActiveFaqs()
+	if err != nil || len(allFaqs) == 0 {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al leer la base de conocimientos"})
+		return
+	}
+
+	// 2. Buscamos coincidencias con la pregunta del usuario
+	matchedFaqs := h.buscarFaqs(body.Question, allFaqs)
+
+	// CASO A: Se encontraron coincidencias
+	if len(matchedFaqs) > 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"answer":         "¿Te referís a alguna de estas opciones?",
+			"isCTA":          false,
+			"options":        matchedFaqs,
+			"failedAttempts": 0, // Reiniciamos el contador al acertar
+		})
+		return
+	}
+
+	// CASO B: NO se encontraron coincidencias -> Incrementamos el contador
+	currentAttempts := body.FailedAttempts + 1
+
+	if currentAttempts < 3 {
+		// Intentos 1 y 2: Mostramos FAQs destacadas/generales para sugerir temas
+		sugerenciasGenerales := h.obtenerFaqsDestacadas(allFaqs, 3)
+
+		var mensaje string
+		if currentAttempts == 1 {
+			mensaje = "No logré identificar tu consulta. ¿Te referís a alguno de estos temas o podrías intentar escribirlo con otras palabras?"
+		} else {
+			mensaje = "Sigo sin encontrar una coincidencia exacta. ¿Tu duda tiene que ver con alguno de estos temas?"
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"answer":         mensaje,
+			"isCTA":          false,
+			"options":        sugerenciasGenerales,
+			"failedAttempts": currentAttempts,
+		})
+		return
+	}
+
+	// CASO C: Tercer intento fallido (currentAttempts >= 3) -> Derivación a Ticket
+	c.JSON(http.StatusOK, gin.H{
+		"answer":         "Ese inconveniente no figura en mis guías. Por favor, creá un ticket indicando: Establecimiento, Módulo y Descripción del error.",
+		"isCTA":          true,
+		"options":        []models.Faq{},
+		"failedAttempts": 0, // Reiniciamos para futuras consultas
+	})
 }
 
-func (h *ChatbotHandler) filtrarFaqsRelevantes(pregunta string, faqs []models.Faq) string {
+// 👇 NUEVA FUNCIÓN: Identifica si el texto ingresado es puramente un saludo
+func (h *ChatbotHandler) esSaludo(pregunta string) bool {
+	// Pasamos a minúsculas y quitamos espacios a los lados
+	pregunta = strings.ToLower(strings.TrimSpace(pregunta))
+	
+	// Limpiamos signos de puntuación comunes para que "¡Hola!" o "hola," coincidan
+	pregunta = strings.ReplaceAll(pregunta, "¿", "")
+	pregunta = strings.ReplaceAll(pregunta, "?", "")
+	pregunta = strings.ReplaceAll(pregunta, "¡", "")
+	pregunta = strings.ReplaceAll(pregunta, "!", "")
+	pregunta = strings.ReplaceAll(pregunta, ",", "")
+	pregunta = strings.TrimSpace(pregunta)
+
+	// Lista de saludos exactos (si la frase completa es solo esto, es un saludo)
+	saludos := []string{
+		"hola", "holas", "holaa", "buenas", "buen dia", "buenos dias",
+		"buenas tardes", "buenas noches", "saludos", "hola que tal",
+		"hola como estas", "como estas", "que tal", "buen día", "buenos días",
+	}
+
+	for _, s := range saludos {
+		if pregunta == s {
+			return true
+		}
+	}
+	
+	return false
+}
+
+// Búsqueda simple por palabras clave en las FAQs
+func (h *ChatbotHandler) buscarFaqs(pregunta string, faqs []models.Faq) []models.Faq {
 	pregunta = strings.ToLower(pregunta)
 	palabras := strings.Fields(pregunta)
-
 	stopWords := map[string]bool{"el": true, "la": true, "los": true, "las": true, "un": true, "una": true, "como": true, "mi": true, "de": true, "para": true, "que": true, "en": true, "a": true, "y": true, "o": true, "por": true, "con": true, "necesito": true, "quiero": true}
 
-	contexto := "BASE DE CONOCIMIENTO HSI:\n"
-	agregadas := 0
+	var resultados []models.Faq
 
 	for _, faq := range faqs {
 		textoFaq := strings.ToLower(fmt.Sprintf("%s %s", faq.Questions, faq.Answers))
@@ -75,33 +144,21 @@ func (h *ChatbotHandler) filtrarFaqsRelevantes(pregunta string, faqs []models.Fa
 		}
 
 		if coincidencias > 0 {
-			contexto += fmt.Sprintf("- PREGUNTA: %s | RESPUESTA: %s\n", faq.Questions, faq.Answers)
-			agregadas++
+			resultados = append(resultados, faq)
 		}
 
-		if agregadas >= 2 {
+		if len(resultados) >= 4 {
 			break
 		}
 	}
 
-	if agregadas == 0 {
-		palabrasSistema := []string{"error", "falla", "cuelga", "lento", "sistema", "funciona", "ticket", "clave", "usuario", "pantalla", "ingresar", "hsi", "modulo", "paciente", "turno"}
-		esTemaSistema := false
+	return resultados
+}
 
-		for _, p := range palabrasSistema {
-			if strings.Contains(pregunta, p) {
-				esTemaSistema = true
-				break
-			}
-		}
-
-		if esTemaSistema {
-			return "INFORMACIÓN HSI: [El problema del usuario es sobre el sistema HSI pero no figura en las guías. Indícale obligatoriamente que cree un Ticket de soporte]."
-		} else {
-			// Es una pregunta descolgada (deportes, clima, etc.) -> Instrucción de Rechazo Estricto
-			return "INFORMACIÓN HSI: [LA CONSULTA ES AJENA AL SISTEMA HSI. Aplica inmediatamente la REGLA DE ORO DE RECHAZO]."
-		}
+// Devuelve un subconjunto de FAQs representativas cuando no hay coincidencia directa
+func (h *ChatbotHandler) obtenerFaqsDestacadas(faqs []models.Faq, limite int) []models.Faq {
+	if len(faqs) <= limite {
+		return faqs
 	}
-
-	return contexto
+	return faqs[:limite]
 }
