@@ -1,0 +1,61 @@
+<div #wrap class="hsi-robot-wrap" [style.width]="size" [style.height]="size">
+
+  <!-- Capa de entrada (pop al cargar la página) -->
+  <div class="hsi-anim">
+    <!-- Capa de balanceo 3D -->
+    <div class="hsi-3d">
+      <svg viewBox="0 0 480 480" class="hsi-robot-svg" xmlns="http://www.w3.org/2000/svg" role="img"
+        aria-label="Asistente de soporte HSI">
+        <defs>
+          <radialGradient id="hsiBody" cx="38%" cy="30%" r="78%">
+            <stop offset="0%" stop-color="var(--hsi-c1)" />
+            <stop offset="22%" stop-color="var(--hsi-c2)" />
+            <stop offset="48%" stop-color="var(--hsi-c3)" />
+            <stop offset="72%" stop-color="var(--hsi-c4)" />
+            <stop offset="100%" stop-color="var(--hsi-c5)" />
+          </radialGradient>
+          <radialGradient id="hsiEye" cx="35%" cy="28%" r="75%">
+            <stop offset="0%" stop-color="var(--hsi-eye-1)" />
+            <stop offset="60%" stop-color="var(--hsi-eye-2)" />
+            <stop offset="100%" stop-color="var(--hsi-eye-3)" />
+          </radialGradient>
+          <linearGradient id="hsiEar" x1="20%" y1="0%" x2="80%" y2="100%">
+            <stop offset="0%" stop-color="var(--hsi-ear-1)" />
+            <stop offset="100%" stop-color="var(--hsi-ear-2)" />
+          </linearGradient>
+          <radialGradient id="hsiShine" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#ffffff" stop-opacity="0.85" />
+            <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+          </radialGradient>
+          <radialGradient id="hsiSmile" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="var(--hsi-smile)" stop-opacity="0.55" />
+            <stop offset="100%" stop-color="var(--hsi-smile)" stop-opacity="0" />
+          </radialGradient>
+        </defs>
+
+        <g class="hsi-sway">
+          <g class="hsi-float">
+            <!-- Antena (se menea sola desde la base) -->
+            <g class="hsi-antenna">
+              <line x1="255" y1="112" x2="240" y2="58" stroke="var(--hsi-antenna)" stroke-width="5" stroke-linecap="round" />
+              <circle cx="238" cy="52" r="14" fill="url(#hsiBody)" class="hsi-body" />
+            </g>
+
+            <ellipse cx="98" cy="205" rx="40" ry="42" fill="url(#hsiEar)" />
+            <ellipse cx="388" cy="188" rx="42" ry="44" fill="url(#hsiEar)" />
+
+            <circle cx="240" cy="248" r="152" fill="url(#hsiBody)" class="hsi-body" />
+
+            <ellipse cx="180" cy="168" rx="58" ry="36" fill="url(#hsiShine)" class="hsi-shine" />
+            <ellipse cx="300" cy="360" rx="70" ry="40" fill="url(#hsiSmile)" />
+
+            <g class="hsi-eyes">
+              <ellipse #eyeL cx="196" cy="228" rx="21" ry="30" fill="url(#hsiEye)" />
+              <ellipse #eyeR cx="286" cy="222" rx="21" ry="30" fill="url(#hsiEye)" />
+            </g>
+          </g>
+        </g>
+      </svg>
+    </div>
+  </div>
+</div>

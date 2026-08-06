@@ -3,529 +3,453 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
+import { HsiRobotLogoComponent } from '../../shared/components/hsi-robot-logo/hsi-robot-logo.component';
+import { HsiHalftoneComponent } from '../../shared/components/hsi-halftone/hsi-halftone.component';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, HsiRobotLogoComponent, HsiHalftoneComponent],
   template: `
-    <div class="login-wrapper">
-      <div class="login-container">
-        <!-- Left Side: Institutional Illustration -->
-        <div class="illustration-column">
-          <div class="illustration-card">
-            <!-- Stylized Health Network Icon -->
-            <div class="health-network-icon">
-              <div class="node central"></div>
-              <div class="node outer outer-1"></div>
-              <div class="node outer outer-2"></div>
-              <div class="node outer outer-3"></div>
-              <div class="connection conn-1"></div>
-              <div class="connection conn-2"></div>
-              <div class="connection conn-3"></div>
-            </div>
-            <div class="illustration-text">
-              <h3>Historia de Salud Integrada</h3>
-              <p>Red Asistencial de La Rioja</p>
-            </div>
-          </div>
+    <div class="hsi-page">
+      <!-- Fondo: halftone animado (oleaje de puntos) + 2 manchas que derivan lento -->
+      <hsi-halftone class="hsi-halftone"></hsi-halftone>
+      <div class="hsi-blob hsi-blob--a" aria-hidden="true"></div>
+      <div class="hsi-blob hsi-blob--b" aria-hidden="true"></div>
+
+      <!-- Header: logos institucionales + acceso rápido -->
+      <header class="hsi-header">
+        <div class="hsi-logos">
+          <img class="hsi-logo hsi-logo--escudo" src="assets/logos/provincia.svg"
+            alt="Escudo de la Provincia de La Rioja" />
+          <span class="hsi-logo-sep" aria-hidden="true"></span>
+          <img class="hsi-logo hsi-logo--min" src="assets/logos/ministerio.svg"
+            alt="Ministerio de Salud" />
         </div>
+        <div class="hsi-header-tag">
+          <span class="material-icons hsi-i" aria-hidden="true">headset</span>
+          <span>Centro de soporte</span>
+        </div>
+      </header>
 
-        <!-- Right Side: Login Card -->
-        <div class="form-column">
-          <div class="login-card">
-            <!-- Logo Placeholder (120x40px) -->
-            <div class="logo-placeholder">
-              <span class="logo-box"></span>
-              <span class="logo-text">MINSALUT</span>
-            </div>
+      <!-- Contenido: todo centrado en una columna -->
+      <main class="hsi-main">
+        <hsi-robot-logo size="clamp(160px, 25vh, 250px)"></hsi-robot-logo>
 
-            <h1>Sistema de Soporte de HSI</h1>
-            <p class="subtitle">Provincia de La Rioja — Ministerio de Salud</p>
+        <h1 class="hsi-title">Sistema de Soporte de HSI</h1>
 
-            <!-- Mode Selector Tabs -->
-            <div class="login-tabs">
-              <button 
-                type="button" 
-                class="tab-btn" 
-                [class.active]="loginMode() === 'user'" 
-                (click)="setLoginMode('user')"
-              >
-                Usuario HSI
-              </button>
-              <button 
-                type="button" 
-                class="tab-btn" 
-                [class.active]="loginMode() === 'admin'" 
-                (click)="setLoginMode('admin')"
-              >
-                Administrador
-              </button>
-            </div>
 
+        <section class="hsi-card">
+          <div class="hsi-tabs" role="tablist" aria-label="Tipo de acceso">
+            <button
+              type="button" role="tab" class="hsi-tab"
+              [class.is-active]="loginMode() === 'user'"
+              [attr.aria-selected]="loginMode() === 'user'"
+              (click)="setLoginMode('user')"
+            >Usuario HSI</button>
+            <button
+              type="button" role="tab" class="hsi-tab"
+              [class.is-active]="loginMode() === 'admin'"
+              [attr.aria-selected]="loginMode() === 'admin'"
+              (click)="setLoginMode('admin')"
+            >Administrador</button>
+          </div>
+
+          <p class="hsi-help-text">
             @if (loginMode() === 'user') {
-              <p class="description">
-                Accedé con tu usuario de Historia de Salud Integrada (Email institucional) y DNI para reportar incidentes, consultar el estado de tus tickets y acceder a recursos.
-              </p>
+              Accedé con tu usuario de Historia de Salud Integrada (email institucional) y DNI
+              para reportar incidentes, consultar el estado de tus tickets y acceder a recursos.
             } @else {
-              <p class="description">
-                Acceso exclusivo para el personal de soporte técnico y administración del Sistema de Soporte de HSI.
-              </p>
+              Accedé con tus credenciales de administrador para gestionar tickets, usuarios y
+              recursos del sistema de soporte.
+            }
+          </p>
+
+          <form (submit)="onSubmit($event)">
+            @if (loginMode() === 'user') {
+              <!-- User Form Fields: Email & DNI -->
+              <label class="hsi-label" for="hsi-email">Usuario HSI (Email)</label>
+              <div class="hsi-field" [class.has-error]="errorMessage() && !hsiEmail">
+                <span class="material-icons hsi-i" aria-hidden="true">email</span>
+                <input
+                  id="hsi-email"
+                  type="email"
+                  name="hsiEmail"
+                  [(ngModel)]="hsiEmail"
+                  placeholder="usuario@salud.larioja.gob.ar"
+                  [disabled]="isLoading()"
+                  required
+                />
+              </div>
+
+              <label class="hsi-label" for="hsi-dni">DNI</label>
+              <div class="hsi-field" [class.has-error]="errorMessage() && !hsiDni">
+                <span class="material-icons hsi-i" aria-hidden="true">badge</span>
+                <input
+                  id="hsi-dni"
+                  type="text"
+                  inputmode="numeric"
+                  name="hsiDni"
+                  [(ngModel)]="hsiDni"
+                  placeholder="Ingresá tu DNI"
+                  [disabled]="isLoading()"
+                  pattern="[0-9]*"
+                  required
+                />
+              </div>
+            } @else {
+              <!-- Admin Form Fields: Username & Password -->
+              <label class="hsi-label" for="admin-username">Usuario Admin</label>
+              <div class="hsi-field" [class.has-error]="errorMessage() && !adminUsername">
+                <span class="material-icons hsi-i" aria-hidden="true">person</span>
+                <input
+                  id="admin-username"
+                  type="text"
+                  name="adminUsername"
+                  [(ngModel)]="adminUsername"
+                  placeholder="Ingresá tu usuario admin"
+                  [disabled]="isLoading()"
+                  required
+                />
+              </div>
+
+              <label class="hsi-label" for="admin-password">Contraseña</label>
+              <div class="hsi-field" [class.has-error]="errorMessage() && !adminPassword">
+                <span class="material-icons hsi-i" aria-hidden="true">lock</span>
+                <input
+                  id="admin-password"
+                  type="password"
+                  name="adminPassword"
+                  [(ngModel)]="adminPassword"
+                  placeholder="Ingresá tu contraseña"
+                  [disabled]="isLoading()"
+                  required
+                />
+              </div>
             }
 
-            <div class="separator"></div>
+            @if (errorMessage()) {
+              <span class="hsi-error-msg">
+                {{ errorMessage() }}
+              </span>
+            }
 
-            <form (submit)="onSubmit($event)">
-              @if (loginMode() === 'user') {
-                <!-- User Form Fields: Email & DNI -->
-                <div class="form-group" [class.has-error]="errorMessage() && !hsiEmail">
-                  <label for="hsiEmail">Usuario HSI (Email)</label>
-                  <div class="input-container">
-                    <span class="material-icons input-icon">email</span>
-                    <input
-                      type="email"
-                      id="hsiEmail"
-                      name="hsiEmail"
-                      [(ngModel)]="hsiEmail"
-                      placeholder="usuario@salud.larioja.gob.ar"
-                      [disabled]="isLoading()"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div class="form-group" [class.has-error]="errorMessage() && !hsiDni">
-                  <label for="hsiDni">DNI</label>
-                  <div class="input-container">
-                    <span class="material-icons input-icon">badge</span>
-                    <input
-                      type="text"
-                      id="hsiDni"
-                      name="hsiDni"
-                      [(ngModel)]="hsiDni"
-                      placeholder="Ingresá tu DNI"
-                      [disabled]="isLoading()"
-                      pattern="[0-9]*"
-                      required
-                    />
-                  </div>
-                </div>
+            <button type="submit" class="hsi-submit" [disabled]="isLoading()">
+              @if (isLoading()) {
+                <span class="hsi-loader"></span>
               } @else {
-                <!-- Admin Form Fields: Username & Password -->
-                <div class="form-group" [class.has-error]="errorMessage() && !adminUsername">
-                  <label for="adminUsername">Usuario Admin</label>
-                  <div class="input-container">
-                    <span class="material-icons input-icon">person</span>
-                    <input
-                      type="text"
-                      id="adminUsername"
-                      name="adminUsername"
-                      [(ngModel)]="adminUsername"
-                      placeholder="Ingresá tu usuario admin"
-                      [disabled]="isLoading()"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div class="form-group" [class.has-error]="errorMessage() && !adminPassword">
-                  <label for="adminPassword">Contraseña</label>
-                  <div class="input-container">
-                    <span class="material-icons input-icon">lock</span>
-                    <input
-                      type="password"
-                      id="adminPassword"
-                      name="adminPassword"
-                      [(ngModel)]="adminPassword"
-                      placeholder="Ingresá tu contraseña"
-                      [disabled]="isLoading()"
-                      required
-                    />
-                  </div>
-                </div>
+                Ingresar al sistema
               }
+            </button>
+          </form>
 
-              @if (errorMessage()) {
-                <span class="error-msg">
-                  {{ errorMessage() }}
-                </span>
-              }
-
-              <button type="submit" class="submit-btn" [disabled]="isLoading()">
-                @if (isLoading()) {
-                  <span class="loader"></span>
-                } @else {
-                  Ingresar al sistema
-                }
-              </button>
-            </form>
-
-            <div class="card-footer">
-              ¿Problemas para acceder? Contactá a tu administrador HSI.
-            </div>
-          </div>
-        </div>
-      </div>
+          <p class="hsi-footer-link">
+            ¿Problemas para acceder?
+            <a href="https://wa.me/+543804625960/?text=Hola,+solicito+asistencia+ya+que+tengo+un+problema+para+acceder+a+mi+cuenta+en+el+sistema+de+soporte+de+HSI:+" target="_blank" rel="noopener noreferrer">Contactá a tu administrador HSI</a>
+          </p>
+        </section>
+      </main>
     </div>
   `,
   styles: [`
-    .login-wrapper {
-      min-height: 100vh;
-      width: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background-color: var(--color-bg-secondary);
-      background-image: radial-gradient(var(--color-border) 1.5px, transparent 1.5px);
-      background-size: 20px 20px;
-      padding: 24px;
+    :host {
+      /* ---- Identidad de color HSI ---- */
+      --hsi-bg: #f5fafb;
+      --hsi-primary: #4aa9c1;
+      --hsi-primary-2: #67c1d3;
+      --hsi-primary-dark: #2f8fb0;
+      --hsi-ink: #26374e;
+      --hsi-ink-soft: #5f7d8a;
+      --hsi-line: #dbe7ec;
+      --hsi-card: #ffffff;
+      --hsi-muted: #7b95a0;
+
+      display: block;
     }
 
-    .login-container {
-      width: 100%;
-      max-width: 1280px;
-      height: 800px;
-      display: flex;
-      background: transparent;
-      border-radius: var(--radius-card);
+    .hsi-page {
+      position: relative;
+      height: 100vh;
       overflow: hidden;
-    }
-
-    .illustration-column {
-      flex: 0 0 45%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding-right: 20px;
-    }
-
-    .illustration-card {
-      width: 100%;
-      height: 100%;
-      background: var(--color-bg-primary);
-      border-radius: 20px;
-      box-shadow: var(--shadow-card);
+      background: var(--hsi-bg);
+      color: var(--hsi-ink);
+      font-family: system-ui, "Segoe UI", Roboto, sans-serif;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 40px;
-      border: 1px solid var(--color-border);
     }
 
-    .health-network-icon {
-      position: relative;
-      width: 160px;
-      height: 160px;
-      margin-bottom: 24px;
+    /* ---------- Fondo ---------- */
+    .hsi-halftone {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
     }
 
-    .node {
+    .hsi-blob {
       position: absolute;
       border-radius: 50%;
-    }
-
-    .node.central {
-      width: 44px;
-      height: 44px;
-      background-color: var(--color-accent-teal);
-      top: 58px;
-      left: 58px;
-      z-index: 3;
-    }
-
-    .node.outer {
-      width: 28px;
-      height: 28px;
-      background-color: var(--color-accent-mint);
-      z-index: 3;
-      border: 2px solid var(--color-accent-teal);
-    }
-
-    .outer-1 { top: 10px; left: 66px; }
-    .outer-2 { bottom: 20px; left: 15px; }
-    .outer-3 { bottom: 20px; right: 15px; }
-
-    .connection {
-      position: absolute;
-      background-color: var(--color-accent-mint);
-      height: 4px;
+      filter: blur(12px);
+      pointer-events: none;
+      will-change: transform;
       z-index: 1;
-      transform-origin: left center;
     }
 
-    .conn-1 {
-      width: 50px;
-      top: 35px;
-      left: 80px;
-      transform: rotate(90deg);
+    .hsi-blob--a {
+      top: -140px;
+      left: -110px;
+      width: 440px;
+      height: 440px;
+      background: radial-gradient(circle at 35% 35%, #8fe0e6, #4bb8ca 60%, transparent 72%);
+      opacity: 0.22;
+      animation: hsi-drift-a 22s ease-in-out infinite;
     }
 
-    .conn-2 {
-      width: 60px;
-      top: 80px;
-      left: 80px;
-      transform: rotate(135deg);
+    .hsi-blob--b {
+      bottom: -180px;
+      right: -130px;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle at 40% 40%, #a9c8ff, #5b8bff 55%, transparent 72%);
+      opacity: 0.16;
+      animation: hsi-drift-b 26s ease-in-out infinite;
     }
 
-    .conn-3 {
-      width: 60px;
-      top: 80px;
-      left: 80px;
-      transform: rotate(45deg);
+    @keyframes hsi-drift-a {
+      0%, 100% { transform: translate(0, 0); }
+      50% { transform: translate(40px, 30px); }
+    }
+    @keyframes hsi-drift-b {
+      0%, 100% { transform: translate(0, 0); }
+      50% { transform: translate(-38px, -28px); }
     }
 
-    .illustration-text {
-      text-align: center;
-    }
-
-    .illustration-text h3 {
-      color: var(--color-text-primary);
-      font-size: 20px;
-      font-weight: 700;
-      margin-bottom: 4px;
-    }
-
-    .illustration-text p {
-      color: var(--color-text-muted);
-      font-size: 14px;
-    }
-
-    .form-column {
-      flex: 0 0 55%;
+    /* ---------- Header ---------- */
+    .hsi-header {
+      position: relative;
+      z-index: 2;
       display: flex;
       align-items: center;
-      justify-content: center;
+      justify-content: space-between;
+      padding: clamp(10px, 2.5vh, 20px) clamp(20px, 4vw, 48px);
     }
 
-    .login-card {
-      width: 100%;
-      height: 100%;
-      background: var(--color-bg-primary);
-      border-radius: 20px;
-      box-shadow: var(--shadow-card);
-      padding: 48px;
+    .hsi-logos {
       display: flex;
-      flex-direction: column;
-      justify-content: center;
-      border: 1px solid var(--color-border);
+      align-items: center;
+      gap: 16px;
     }
 
-    .logo-placeholder {
+    .hsi-logo {
+      display: block;
+      width: auto;
+    }
+    .hsi-logo--escudo { height: 56px; }   /* escudo cuadrado */
+    .hsi-logo--min { height: 34px; }      /* wordmark ministerio */
+
+    .hsi-logo-sep {
+      width: 1px;
+      height: 38px;
+      background: #c9dbe1;
+    }
+
+    .hsi-header-tag {
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-bottom: 24px;
+      color: var(--hsi-primary);
+      font-size: 13px;
+      font-weight: 500;
     }
 
-    .logo-box {
-      width: 24px;
-      height: 24px;
-      background: var(--color-accent-teal);
-      border-radius: 6px;
-    }
-
-    .logo-text {
-      font-family: var(--font-heading);
-      font-weight: 700;
-      color: var(--color-text-primary);
-      letter-spacing: 1.5px;
-      font-size: 14px;
-    }
-
-    .login-card h1 {
-      font-size: 28px;
-      font-weight: 700;
-      color: var(--color-text-primary);
-      margin-bottom: 4px;
-    }
-
-    .subtitle {
-      font-size: 14px;
-      color: var(--color-text-muted);
-      margin-bottom: 20px;
-    }
-
-    /* Tabs styling */
-    .login-tabs {
+    /* ---------- Main (todo centrado) ---------- */
+    .hsi-main {
+      position: relative;
+      z-index: 2;
       display: flex;
-      background-color: var(--color-bg-secondary);
-      border-radius: var(--radius-input);
-      padding: 4px;
-      margin-bottom: 16px;
-      border: 1px solid var(--color-border);
-      width: 100%;
-      max-width: 400px;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: clamp(4px, 1.5vh, 12px);
+      padding: 0 clamp(20px, 5vw, 64px) clamp(20px, 4vh, 48px);
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
     }
 
-    .tab-btn {
+    .hsi-title {
+      margin: 6px 0 4px;
+      font-size: clamp(22px, 3vw, 28px);
+      font-weight: 400;
+      color: #3a4e5c;
+    }
+
+    .hsi-subtitle {
+      margin: 0 0 10px;
+      max-width: 380px;
+      color: var(--hsi-ink-soft);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    /* Tarjeta */
+    .hsi-card {
+      width: 100%;
+      max-width: 500px;
+      text-align: left;
+      background: var(--hsi-card);
+      border-radius: 20px;
+      box-shadow: 0 18px 50px -22px rgba(47, 111, 196, 0.28);
+      padding: clamp(16px, 3vh, 24px) clamp(20px, 3vw, 30px);
+    }
+
+    .hsi-tabs {
+      display: flex;
+      gap: 4px;
+      background: #eef5f7;
+      border-radius: 12px;
+      padding: 4px;
+      margin-bottom: clamp(10px, 2vh, 16px);
+    }
+
+    .hsi-tab {
       flex: 1;
       border: none;
       background: transparent;
-      padding: 8px;
-      font-family: var(--font-heading);
+      border-radius: 9px;
+      padding: 9px;
       font-size: 13px;
-      font-weight: 600;
-      color: var(--color-text-muted);
+      font-weight: 500;
+      color: var(--hsi-muted);
       cursor: pointer;
-      border-radius: 6px;
-      transition: all 0.2s ease;
+      transition: color 0.15s ease, background 0.15s ease;
+
+      &.is-active {
+        background: #ffffff;
+        color: var(--hsi-ink);
+        box-shadow: 0 2px 8px -4px rgba(0, 0, 0, 0.2);
+      }
     }
 
-    .tab-btn.active {
-      background-color: var(--color-bg-primary);
-      color: var(--color-text-primary);
-      box-shadow: var(--shadow-card);
-    }
-
-    .description {
-      font-size: 12px;
+    .hsi-help-text {
+      margin: 0 0 16px;
+      color: #6a8794;
+      font-size: 12.5px;
       line-height: 1.6;
-      color: var(--color-text-muted);
-      max-width: 360px;
-      margin-bottom: 8px;
     }
 
-    .separator {
-      height: 1px;
-      background-color: var(--color-border);
-      margin: 16px 0 24px 0;
-    }
-
-    form {
-      width: 100%;
-      max-width: 400px;
-    }
-
-    .form-group {
-      margin-bottom: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .form-group label {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--color-text-primary);
-    }
-
-    .input-container {
-      position: relative;
-      display: flex;
-      align-items: center;
-    }
-
-    .input-icon {
-      position: absolute;
-      left: 12px;
-      color: var(--color-accent-teal);
-      font-size: 20px;
-    }
-
-    .input-container input {
-      width: 100%;
-      height: 44px;
-      padding: 0 12px 0 40px;
-      border: 1.5px solid var(--color-border);
-      border-radius: var(--radius-input);
-      font-family: var(--font-body);
-      font-size: 14px;
-      color: var(--color-text-primary);
-      background-color: var(--color-bg-primary);
-      transition: border-color 0.2s ease, box-shadow 0.2s ease;
-      outline: none;
-    }
-
-    .input-container input:focus {
-      border-color: var(--color-accent-teal);
-      box-shadow: 0 0 0 3px rgba(119, 194, 216, 0.15);
-    }
-
-    .form-group.has-error .input-container input {
-      border-color: var(--color-error);
-    }
-
-    .form-group.has-error .input-container input:focus {
-      box-shadow: 0 0 0 3px rgba(224, 88, 88, 0.15);
-    }
-
-    .error-msg {
+    .hsi-label {
       display: block;
       font-size: 12px;
-      color: var(--color-error);
-      margin-bottom: 16px;
+      font-weight: 500;
+      color: #3f5566;
+      margin-bottom: 6px;
     }
 
-    .submit-btn {
+    .hsi-field {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--hsi-line);
+      border-radius: 11px;
+      padding: 10px 13px;
+      margin-bottom: clamp(8px, 1.5vh, 12px);
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
+      &:focus-within {
+        border-color: var(--hsi-primary-2);
+        box-shadow: 0 0 0 3px rgba(103, 193, 211, 0.18);
+      }
+
+      &.has-error {
+        border-color: var(--color-error, #e05858);
+        &:focus-within {
+          box-shadow: 0 0 0 3px rgba(224, 88, 88, 0.15);
+        }
+      }
+
+      input {
+        flex: 1;
+        border: none;
+        outline: none;
+        background: transparent;
+        font-size: 13px;
+        color: var(--hsi-ink);
+
+        &::placeholder { color: #a7bcc4; }
+      }
+    }
+
+    .hsi-i {
+      font-style: normal;
+      font-size: 18px;
+      line-height: 1;
+      color: #88a7b2;
+    }
+
+    .hsi-submit {
       width: 100%;
-      height: 48px;
-      background-color: var(--color-accent-teal);
-      color: var(--color-bg-primary);
       border: none;
-      border-radius: var(--radius-button);
-      font-family: var(--font-heading);
-      font-size: 15px;
-      font-weight: 600;
+      border-radius: 12px;
+      padding: 13px;
+      margin-top: 6px;
+      background: linear-gradient(180deg, var(--hsi-primary-2), var(--hsi-primary));
+      color: #fff;
+      font-weight: 500;
+      font-size: 14px;
       cursor: pointer;
+      transition: filter 0.15s ease, transform 0.05s ease;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: background-color 0.2s ease, transform 0.1s ease;
-      margin-top: 24px;
+
+      &:hover:not(:disabled) { filter: brightness(1.04); }
+      &:active:not(:disabled) { transform: translateY(1px); }
+
+      &:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+      }
     }
 
-    .submit-btn:hover:not(:disabled) {
-      background-color: var(--color-accent-teal-hover);
+    .hsi-error-msg {
+      display: block;
+      font-size: 12px;
+      color: var(--color-error, #e05858);
+      margin-bottom: 12px;
+      margin-top: -4px;
     }
 
-    .submit-btn:active:not(:disabled) {
-      transform: scale(0.98);
-    }
-
-    .submit-btn:disabled {
-      opacity: 0.7;
-      cursor: not-allowed;
-    }
-
-    .card-footer {
-      font-size: 11px;
-      color: var(--color-text-muted);
-      margin-top: 24px;
-    }
-
-    .loader {
+    .hsi-loader {
       width: 20px;
       height: 20px;
       border: 2px solid rgba(255, 255, 255, 0.3);
       border-radius: 50%;
       border-top-color: #FFF;
-      animation: spin 0.8s infinite linear;
+      animation: hsi-spin 0.8s infinite linear;
+      display: inline-block;
     }
 
-    @keyframes spin {
+    @keyframes hsi-spin {
       to { transform: rotate(360deg); }
     }
 
-    @media (max-width: 768px) {
-      .login-container {
-        height: auto;
-        flex-direction: column;
-      }
-      
-      .illustration-column {
-        display: none;
-      }
+    .hsi-footer-link {
+      text-align: center;
+      margin: 14px 0 0;
+      font-size: 12.5px;
+      color: var(--hsi-muted);
 
-      .form-column {
-        flex: 1;
-        width: 100%;
+      a {
+        color: var(--hsi-primary-dark);
+        font-weight: 500;
+        text-decoration: none;
+        &:hover { text-decoration: underline; }
       }
+    }
 
-      .login-card {
-        padding: 32px 24px;
-        min-height: 500px;
-      }
+    @media (prefers-reduced-motion: reduce) {
+      .hsi-blob { animation: none; }
     }
   `]
 })

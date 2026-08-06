@@ -3376,8 +3376,8 @@ export class TicketsTabComponent implements OnInit {
   }
 
   lastSeenMessageTimes = signal<{ [ticketId: string]: string }>({});
-  toastMessage = signal<string | null>(null);
-  toastTicketId = signal<string | null>(null);
+  get toastMessage() { return this.ticketService.toastMessage; }
+  get toastTicketId() { return this.ticketService.toastTicketId; }
   notifiedMessageIds = new Set<string>();
 
   systemTags = signal<any[]>([]);
