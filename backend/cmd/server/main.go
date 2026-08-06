@@ -38,8 +38,12 @@ func main() {
 	// Inicialización de Prioridades
 	priorityRepo := repositories.NewPriorityRepository(db)
 	priorityHandler := handlers.NewPriorityHandler(priorityRepo)
+	
+	// Inicialización de FAQs
 	faqRepo := repositories.NewFaqRepository(db)
 	faqHandler := handlers.NewFaqHandler(faqRepo)
+
+	chatbotHandler := handlers.NewChatbotHandler(faqRepo)
 
 	router := gin.Default()
 
@@ -72,9 +76,14 @@ func main() {
 		{
 			// Protegemos estas rutas para evitar fuga de información (data scraping)
 			protected.GET("/institutions", institutionHandler.GetInstitutions)
+			
+			// Rutas de FAQs (Combinación de la rama main y tu rama)
 			protected.GET("/faqs", faqHandler.GetFaqs)
 			protected.POST("/faqs", faqHandler.CreateFaq)
 			protected.PUT("/faqs/:id", faqHandler.UpdateFaq)
+			
+			// Endpoint para hacer preguntas al Chatbot determinístico
+			protected.POST("/chatbot/ask", chatbotHandler.HandleAsk)
 
 			tickets := protected.Group("/tickets")
 			{
@@ -107,7 +116,7 @@ func main() {
 	router.NoRoute(func(c *gin.Context) {
 		path := c.Request.URL.Path
 
-		// . Si la ruta buscada empieza con /api, es un error del backend real (404)
+		// Si la ruta buscada empieza con /api, es un error del backend real (404)
 		if strings.HasPrefix(path, "/api") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Endpoint not found"})
 			return
@@ -118,7 +127,7 @@ func main() {
 			return
 		}
 
-		// . SPA Fallback: Para cualquier otra ruta (ej: /login, /tickets), 
+		// SPA Fallback: Para cualquier otra ruta (ej: /login, /tickets) 
 		c.File("./public/index.html")
 	})
 

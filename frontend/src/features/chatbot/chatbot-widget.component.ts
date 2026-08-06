@@ -1,9 +1,10 @@
-import { Component, Output, EventEmitter, signal, ElementRef, ViewChild, AfterViewChecked, OnInit, inject, computed, effect } from '@angular/core';
+import { Component, Output, EventEmitter, signal, ElementRef, ViewChild, AfterViewChecked, OnInit, inject, effect, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { HsiRobotLogoComponent } from '../../shared/components/hsi-robot-logo/hsi-robot-logo.component';
 import { TicketService } from '../../core/services/ticket.service';
+import { Router } from '@angular/router';
 
 export interface Faq {
   id: string;
@@ -13,7 +14,6 @@ export interface Faq {
   is_active: boolean;
 }
 
-
 export interface ChatMessage {
   id: string;
   sender: 'bot' | 'user' | 'agent';
@@ -22,6 +22,7 @@ export interface ChatMessage {
   isCTA?: boolean;
   isEscalation?: boolean;
   isEscalationPrompt?: boolean;
+  options?: any[];
 }
 
 @Component({
@@ -82,7 +83,9 @@ export interface ChatMessage {
                 <span class="material-icons">close</span>
               </button>
             </div>
-          </div> <div class="chat-history" #scrollContainer>
+          </div> 
+          
+          <div class="chat-history" #scrollContainer>
             @for (msg of messages(); track msg.id) {
               <div class="message-row" [ngClass]="msg.sender">
                 
@@ -105,7 +108,7 @@ export interface ChatMessage {
                     'escalation-bubble': msg.isEscalation
                   }"
                 >
-                  <p>{{ msg.content }}</p>
+                  <p style="white-space: pre-wrap;">{{ msg.content }}</p>
                   
                   @if (msg.isCTA) {
                     <button class="cta-btn" (click)="triggerCTA()">
@@ -118,34 +121,20 @@ export interface ChatMessage {
                       👤 Hablar con un agente
                     </button>
                   }
+
+                  @if (msg.options && msg.options.length > 0) {
+                    <div class="faq-options-container" style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
+                      @for (faq of msg.options; track faq.id) {
+                        <button 
+                          (click)="selectOption(faq)" 
+                          style="background-color: #EBF4FD; color: var(--bot-blue); border: 1px solid #D6E9FC; border-radius: 8px; padding: 8px; text-align: left; cursor: pointer; font-family: var(--font-body); font-size: 13px; transition: all 0.2s;">
+                          {{ faq.questions }}
+                        </button>
+                      }
+                    </div>
+                  }
                 </div>
               </div> 
-            } 
-            
-            @if (showFAQChips() && faqs().length > 0) {
-              <div class="faq-chips-row">
-                
-                @if (!selectedCategory()) {
-                  @for (category of uniqueCategories(); track category) {
-                    <button class="faq-chip" (click)="onCategoryClick(category)">
-                      {{ category }}
-                    </button>
-                  }
-                } 
-                
-                @else {
-                  <button class="faq-chip back-chip" (click)="onBackToCategories()" style="background-color: var(--color-bg-secondary); border-color: var(--color-border); color: var(--color-text-primary);">
-                    <span class="material-icons" style="font-size: 14px; vertical-align: middle;">arrow_back</span>
-                  </button>
-                  
-                  @for (faq of faqsForCategory(); track faq.id) {
-                    <button class="faq-chip" (click)="onFAQClick(faq)">
-                      {{ faq.questions }}
-                    </button>
-                  }
-                }
-
-              </div>
             }
 
             @if (isTyping()) {
@@ -169,13 +158,12 @@ export interface ChatMessage {
               rows="1"
               [(ngModel)]="userInput"
               name="userInput"
-              placeholder="Escritura deshabilitada temporalmente. Por favor, usá los botones..."
+              placeholder="Escribí tu consulta aquí..."
               (keydown.enter)="onEnterKey($event)"
               #inputTextarea
-              disabled
             ></textarea>
             
-            <button type="submit" class="send-btn" [disabled]="true">
+            <button type="submit" class="send-btn" [disabled]="!userInput.trim() || isTyping()">
               <span class="material-icons">send</span>
             </button>
           </form>
@@ -283,7 +271,7 @@ export interface ChatMessage {
     }
 
     .chat-window {
-      position: relative; /* 👇 NUEVO: Mantiene el pop-up atrapado acá adentro */
+      position: relative;
       width: 380px;
       height: 560px;
       background-color: var(--color-bg-primary);
@@ -487,37 +475,6 @@ export interface ChatMessage {
       background-color: #FFF9F3 !important;
     }
 
-    /* FAQ Suggestions Chips */
-    .faq-chips-row {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      padding-left: 32px;
-      align-items: flex-start;
-      margin-top: -8px;
-    }
-
-    .faq-chip {
-      background-color: #EBF4FD;
-      border: 1px solid var(--bot-blue);
-      color: var(--bot-blue);
-      padding: 6px 14px;
-      border-radius: 12px;
-      font-family: var(--font-body);
-      font-size: 12px;
-      cursor: pointer;
-      transition: background-color 0.2s, transform 0.1s;
-      text-align: left;
-    }
-
-    .faq-chip:hover {
-      background-color: #D6E9FC;
-    }
-
-    .faq-chip:active {
-      transform: scale(0.97);
-    }
-
     /* CTA Button inside bot message */
     .cta-btn {
       margin-top: 8px;
@@ -609,7 +566,7 @@ export interface ChatMessage {
 
     /* Confirm Overlay */
     .confirm-overlay {
-      position: absolute; /* Se posiciona relativo a .chat-window */
+      position: absolute;
       top: 0;
       left: 0;
       width: 100%;
@@ -642,7 +599,7 @@ export interface ChatMessage {
 
     .warning-icon {
       font-size: 32px;
-      color: #E29E21; /* Color de advertencia */
+      color: #E29E21;
       margin: 0 auto;
     }
 
@@ -703,10 +660,10 @@ export interface ChatMessage {
   `]
 })
 export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
-  @Output() navigateToTickets = new EventEmitter<void>();
   @ViewChild('scrollContainer') private scrollContainer!: ElementRef;
   @ViewChild('inputTextarea') private inputTextarea!: ElementRef;
-
+  private router = inject(Router);
+  failedAttempts = 0;
   private http = inject(HttpClient);
   private ticketService = inject(TicketService);
 
@@ -714,30 +671,8 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
 
   isOpen = signal(sessionStorage.getItem('hsi_chat_open') === 'true');
   isTyping = signal(false);
-  showFAQChips = signal(true);
   confirmAction = signal<'reset' | 'close' | null>(null);
   userInput = '';
-
-  faqs = signal<Faq[]>([]);
-
-  // 👇 NUEVO: Signal para saber qué categoría seleccionó el usuario
-  selectedCategory = signal<string | null>(null);
-
-  failedAttempts = signal(0);
-
-  // 👇 NUEVO: Extraemos solo las categorías (labels) únicas para el primer menú
-  uniqueCategories = computed(() => {
-    const allFaqs = this.faqs();
-    // Usamos Set para eliminar los duplicados mágicamente
-    return [...new Set(allFaqs.map(f => f.label))];
-  });
-
-  // 👇 NUEVO: Filtramos las FAQs que pertenecen a la categoría seleccionada
-  faqsForCategory = computed(() => {
-    const category = this.selectedCategory();
-    if (!category) return [];
-    return this.faqs().filter(f => f.label === category);
-  });
 
   messages = signal<ChatMessage[]>(this.loadSavedMessages());
 
@@ -746,7 +681,6 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // JSON convierte las fechas a texto, las volvemos a hacer formato Date
         parsed.forEach((m: any) => m.timestamp = new Date(m.timestamp));
         return parsed;
       } catch (e) {
@@ -758,7 +692,7 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
       {
         id: 'msg_1',
         sender: 'bot',
-        content: '¡Hola! Soy el asistente virtual de HSI. Podés elegir una de las opciones rápidas para resolver tu duda:',
+        content: '¡Hola! Soy el asistente virtual de HSI. ¿En qué te puedo ayudar hoy?',
         timestamp: new Date()
       }
     ];
@@ -769,72 +703,16 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
       sessionStorage.setItem('hsi_chat_messages', JSON.stringify(this.messages()));
     });
 
-    // guardamos el estado de la ventana (para que no se cierre si recargan)
     effect(() => {
       sessionStorage.setItem('hsi_chat_open', String(this.isOpen()));
     });
   }
 
   ngOnInit(): void {
-    // Cargar FAQs al iniciar el componente
-    this.loadFaqs();
   }
 
-  private findBestFaqMatch(input: string): Faq | undefined {
-    const normalizedInput = input.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-    // Palabras comunes que ignoramos
-    const stopWords = ['el', 'la', 'los', 'las', 'un', 'una', 'como', 'mi', 'de', 'para', 'que', 'en', 'a', 'y', 'o', 'por', 'con', 'tu', 'su', 'quiero', 'necesito'];
-
-    const keywords = normalizedInput
-      .split(/\W+/)
-      .filter(word => word.length > 2 && !stopWords.includes(word));
-
-    if (keywords.length === 0) return undefined;
-
-    let bestMatch: Faq | undefined = undefined;
-    let highestScore = 0;
-
-    for (const faq of this.faqs()) {
-      const targetText = `${faq.label} ${faq.questions} ${faq.answers}`
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "");
-
-      let score = 0;
-      for (const kw of keywords) {
-        if (targetText.includes(kw)) {
-          score++;
-        }
-      }
-
-      if (score > highestScore) {
-        highestScore = score;
-        bestMatch = faq;
-      }
-    }
-
-    return highestScore > 0 ? bestMatch : undefined;
-  }
   ngAfterViewChecked(): void {
     this.scrollToBottom();
-  }
-
-  loadFaqs(): void {
-    // Usamos la clave exacta que vimos en el navegador
-    const token = sessionStorage.getItem('hsi_token');
-
-    // Armamos el encabezado con el token
-    const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
-
-    this.http.get<Faq[]>('/api/faqs', { headers }).subscribe({
-      next: (data) => {
-        this.faqs.set(data);
-      },
-      error: (err) => {
-        console.error('Error al cargar las FAQs:', err);
-      }
-    });
   }
 
   toggleChat(): void {
@@ -849,7 +727,6 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
     this.resetChat();
   }
 
-  // Llama al pop-up
   promptAction(action: 'reset' | 'close'): void {
     this.confirmAction.set(action);
   }
@@ -873,61 +750,22 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
   }
 
   resetChat(): void {
-    this.showFAQChips.set(true);
-    this.selectedCategory.set(null);
     this.messages.set([
       {
         id: 'msg_1',
         sender: 'bot',
-        content: '¡Hola! Soy el asistente virtual de HSI. Podés elegir una de las opciones rápidas para resolver tu duda:',
+        content: '¡Hola! Soy el asistente virtual de HSI. ¿En qué te puedo ayudar hoy?',
         timestamp: new Date()
       }
     ]);
     this.isTyping.set(false);
   }
 
-  onCategoryClick(category: string): void {
-    this.selectedCategory.set(category);
-  }
-
-  onBackToCategories(): void {
-    this.selectedCategory.set(null);
-  }
-
-  onFAQClick(faq: Faq): void {
-    this.showFAQChips.set(false);
-    this.selectedCategory.set(null); // Reseteamos la categoría internamente
-
-    this.addMessage('user', faq.questions);
-    this.isTyping.set(true);
-
-    setTimeout(() => {
-      this.isTyping.set(false);
-
-      this.messages.set([
-        ...this.messages(),
-        {
-          id: 'msg_' + Math.random(),
-          sender: 'bot',
-          content: faq.answers,
-          timestamp: new Date(),
-          isCTA: faq.label.toLowerCase().includes('ticket')
-        }
-      ]);
-
-      // 👇 NUEVO: Volvemos a mostrar el menú de opciones para que haga otra consulta
-      this.showFAQChips.set(true);
-      // Forzamos el scroll hacia abajo para que el usuario vea que reaparecieron las opciones
-      setTimeout(() => this.scrollToBottom(), 50);
-
-    }, 1200);
-  }
-
   onEnterKey(event: Event): void {
+    // Previene el salto de línea y envía el mensaje
     event.preventDefault();
     this.onSubmit();
   }
-
 
   onSubmit(event?: Event): void {
     if (event) event.preventDefault();
@@ -935,74 +773,52 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
     if (!input || this.isTyping()) return;
 
     this.userInput = '';
-    this.showFAQChips.set(false);
-    this.selectedCategory.set(null);
-
     this.addMessage('user', input);
     this.isTyping.set(true);
+    setTimeout(() => this.scrollToBottom(), 50);
+
+    const token = sessionStorage.getItem('hsi_token');
+    const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
+
+    // 2. Enviamos la pregunta junto con el número de intentos fallidos acumulados
+    this.http.post<{ answer: string, isCTA: boolean, options: any[], failedAttempts: number }>(
+      '/api/chatbot/ask', 
+      { question: input, failedAttempts: this.failedAttempts }, 
+      { headers }
+    ).subscribe({
+      next: (res) => {
+        this.isTyping.set(false);
+        
+        // 3. Actualizamos el contador local con lo que devuelve el backend
+        this.failedAttempts = res.failedAttempts ?? 0;
+
+        this.addMessage('bot', res.answer, { isCTA: res.isCTA, options: res.options });
+        setTimeout(() => this.scrollToBottom(), 50);
+      },
+      error: (err) => {
+        console.error('Error al consultar el chatbot:', err);
+        this.isTyping.set(false);
+        this.addMessage('bot', 'Tuve un inconveniente al procesar tu consulta. Por favor, intentá nuevamente o creá un ticket de soporte.', { isCTA: true });
+        setTimeout(() => this.scrollToBottom(), 50);
+      }
+    });
+  }
+
+  selectOption(faq: any): void {
+    this.failedAttempts = 0;
+
+    this.addMessage('user', faq.questions);
+    this.isTyping.set(true);
+    setTimeout(() => this.scrollToBottom(), 50);
 
     setTimeout(() => {
       this.isTyping.set(false);
-
-      const matchedFaq = this.findBestFaqMatch(input);
-
-      if (matchedFaq) {
-        // ¡Entendió la pregunta! Reseteamos los fallos a 0
-        this.failedAttempts.set(0);
-
-        this.addMessage('bot', matchedFaq.answers);
-
-        if (matchedFaq.label.toLowerCase().includes('ticket') || matchedFaq.questions.toLowerCase().includes('ticket')) {
-          this.messages.set([
-            ...this.messages(),
-            {
-              id: 'msg_' + Math.random(),
-              sender: 'bot',
-              content: 'Hacé click abajo para ir directamente al formulario de tickets.',
-              timestamp: new Date(),
-              isCTA: true
-            }
-          ]);
-        }
-
-        this.showFAQChips.set(true);
-        setTimeout(() => this.scrollToBottom(), 50);
-
-      } else {
-        // No entendió. Sumamos 1 al contador
-        const currentFails = this.failedAttempts() + 1;
-        this.failedAttempts.set(currentFails);
-
-        if (currentFails >= 3) {
-          // Ya falló 3 veces, le sugerimos crear un ticket oficial
-          this.messages.set([
-            ...this.messages(),
-            {
-              id: 'msg_' + Math.random(),
-              sender: 'bot',
-              content: 'Parece que no logro encontrar la respuesta exacta a tu consulta. Te sugiero cargar un ticket para que el equipo de soporte técnico pueda revisarlo en detalle.',
-              timestamp: new Date(),
-              isCTA: true
-            }
-          ]);
-
-          // Ocultamos las opciones rápidas ya que lo derivamos a tickets
-          this.showFAQChips.set(false);
-          setTimeout(() => this.scrollToBottom(), 50);
-
-        } else {
-          // Es el intento 1 o 2, pedimos que reformule
-          this.addMessage('bot', 'No logré entender tu consulta. ¿Podrías usar otras palabras o ser un poco más específico?');
-
-          this.showFAQChips.set(true);
-          setTimeout(() => this.scrollToBottom(), 50);
-        }
-      }
-    }, 1200);
+      this.addMessage('bot', faq.answers);
+      setTimeout(() => this.scrollToBottom(), 50);
+    }, 600);
   }
 
   triggerEscalation(): void {
-    this.failedAttempts.set(0);
     this.addMessage('user', 'Quiero hablar con un agente humano');
     this.isTyping.set(true);
     setTimeout(() => {
@@ -1035,17 +851,15 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
         }
       ]);
 
-      // Conexión con agente 
       setTimeout(() => {
         this.addMessage('agent', 'Hola, soy Yanina del equipo de soporte. Decime cuál es tu consulta y lo resolvemos.');
       }, 1500);
-
     }, 1000);
   }
 
   triggerCTA(): void {
     this.closeChat();
-    this.navigateToTickets.emit();
+    this.router.navigate(['/home/tickets'], { queryParams: { view: 'create' } });
   }
 
   private scrollToBottom(): void {
