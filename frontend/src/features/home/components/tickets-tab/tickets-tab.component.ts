@@ -242,6 +242,81 @@ export interface Priority {
             }
           </div>
 
+          @if (currentUserRole() === 'user') {
+            <!-- User Search & Filters Section -->
+            <div class="user-filters-container">
+              <!-- Search bar -->
+              <div class="user-search-bar">
+                <span class="material-icons search-icon">search</span>
+                <input 
+                  type="text" 
+                  placeholder="Buscar tus tickets por palabra clave en el título..."
+                  (input)="onSearchInput($event)"
+                  [value]="searchQuery()"
+                />
+                @if (searchQuery()) {
+                  <button class="clear-search-btn" (click)="clearSearch()" title="Limpiar búsqueda">
+                    <span class="material-icons">close</span>
+                  </button>
+                }
+              </div>
+
+              <!-- Filter Controls Row -->
+              <div class="user-filter-controls">
+                <!-- Dropdown for Sorting -->
+                <div class="filter-group">
+                  <label for="user-sort-select">Ordenar por</label>
+                  <div class="select-wrapper">
+                    <span class="material-icons select-icon">sort</span>
+                    <select id="user-sort-select" [ngModel]="userSort()" (ngModelChange)="userSort.set($event)">
+                      <option value="recent">Más recientes</option>
+                      <option value="oldest">Más antiguos</option>
+                      <option value="priority">Mayor prioridad</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Dropdown for Status -->
+                @if (innerViewMode() !== 'archived') {
+                  <div class="filter-group">
+                    <label for="user-status-select">Estado</label>
+                    <div class="select-wrapper">
+                      <span class="material-icons select-icon">filter_alt</span>
+                      <select id="user-status-select" [ngModel]="userStatusFilter()" (ngModelChange)="userStatusFilter.set($event)">
+                        <option value="all">Todos los estados</option>
+                        <option value="open">Abiertos</option>
+                        <option value="in_progress">En progreso</option>
+                        <option value="resolved">Resueltos</option>
+                      </select>
+                    </div>
+                  </div>
+                }
+
+                <!-- Dropdown for Tags -->
+                <div class="filter-group">
+                  <label for="user-tag-select">Etiqueta</label>
+                  <div class="select-wrapper">
+                    <span class="material-icons select-icon">label</span>
+                    <select id="user-tag-select" [ngModel]="userTagFilter()" (ngModelChange)="userTagFilter.set($event)">
+                      <option value="all">Todas las etiquetas</option>
+                      @for (tag of userTags(); track tag) {
+                        <option [value]="tag">{{ tag }}</option>
+                      }
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Clear Filters button -->
+                @if (hasActiveUserFilters()) {
+                  <button class="clear-filters-btn" (click)="clearUserFilters()">
+                    <span class="material-icons">filter_alt_off</span>
+                    Restablecer
+                  </button>
+                }
+              </div>
+            </div>
+          }
+
           @if (currentUserRole() !== 'user' && innerViewMode() !== 'archived') {
             <!-- 6 Stat Cards -->
             <div class="agent-stats-row">
@@ -643,7 +718,7 @@ export interface Priority {
                             <button 
                               type="button" 
                               class="resolve-action-btn"
-                              (click)="changeStatusQuick(ticket.id, 'resuelto')"
+                              (click)="openResolveConfirmation(ticket.id)"
                             >
                               <span class="material-icons" style="font-size: 16px; vertical-align: middle;">task_alt</span>
                               Resolver Ticket
@@ -922,6 +997,32 @@ export interface Priority {
         </div>
       }
 
+      <!-- Resolve Confirmation Modal -->
+      @if (showResolveConfirmModal()) {
+        <div class="confirm-modal-overlay">
+          <div class="confirm-modal-container">
+            <div class="confirm-modal-content">
+              <span class="material-icons confirm-modal-icon">task_alt</span>
+              <h3>¿Todo Listo?</h3>
+              <p>Al confirmar, el estado de este ticket cambiará a "Resuelto".</p>
+            </div>
+            
+            <div class="confirm-modal-actions">
+              <button type="button" class="cancel-confirm-btn" (click)="closeResolveConfirmation()">
+                Cancelar
+              </button>
+              <button 
+                type="button" 
+                class="accept-confirm-btn" 
+                (click)="confirmResolve()"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+
       <!-- Popups section -->
       @if (showCreateSuccess()) {
         <div class="success-overlay">
@@ -933,6 +1034,21 @@ export interface Priority {
             </p>
             <div class="success-actions">
               <button class="accept-btn" (click)="showCreateSuccess.set(false)">Entendido</button>
+            </div>
+          </div>
+        </div>
+      }
+
+      @if (showTransferSuccess()) {
+        <div class="success-overlay">
+          <div class="success-dialog">
+            <span class="material-icons success-icon" style="color: var(--color-success);">check_circle</span>
+            <h4>Ticket transferido correctamente</h4>
+            <p class="clarification-text">
+              El ticket ha sido asignado al nuevo agente y se ha registrado el motivo en el historial del ticket.
+            </p>
+            <div class="success-actions">
+              <button class="accept-btn" (click)="showTransferSuccess.set(false)">Entendido</button>
             </div>
           </div>
         </div>
@@ -1298,7 +1414,7 @@ export interface Priority {
     }
 
     .tickets-list.agent-list {
-      max-height: calc(100vh - 480px);
+      max-height: calc(100vh - 380px);
     }
 
     .ticket-item {
@@ -2095,6 +2211,192 @@ export interface Priority {
       font-weight: 600;
     }
 
+    /* User Filters & Search Styles */
+    .user-filters-container {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      margin-top: 16px;
+      margin-bottom: 16px;
+      background-color: var(--color-bg-secondary);
+      padding: 10px 14px;
+      border-radius: var(--radius-card);
+      border: 1px solid var(--color-border);
+      animation: userFiltersFadeIn 0.3s ease-out;
+    }
+
+    @keyframes userFiltersFadeIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .user-search-bar {
+      display: flex;
+      align-items: center;
+      background-color: var(--color-bg-primary);
+      border: 1.5px solid var(--color-border);
+      border-radius: 20px;
+      padding: 0 12px;
+      height: 34px;
+      gap: 6px;
+      transition: all 0.25s ease;
+      position: relative;
+      flex: 2;
+      min-width: 250px;
+    }
+
+    .user-search-bar:focus-within {
+      border-color: var(--color-accent-teal);
+      box-shadow: 0 0 0 3px rgba(119, 194, 216, 0.1);
+    }
+
+    .user-search-bar input {
+      border: none;
+      background: transparent;
+      outline: none;
+      font-family: var(--font-body);
+      font-size: 13px;
+      color: var(--color-text-primary);
+      width: 100%;
+    }
+
+    .user-search-bar .search-icon {
+      color: var(--color-text-muted);
+      font-size: 18px;
+    }
+
+    .user-search-bar .clear-search-btn {
+      background: transparent;
+      border: none;
+      color: var(--color-text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px;
+      border-radius: 50%;
+      transition: background-color 0.2s;
+    }
+
+    .user-search-bar .clear-search-btn:hover {
+      background-color: rgba(0, 0, 0, 0.05);
+      color: var(--color-text-primary);
+    }
+
+    .user-filter-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 3;
+      flex-wrap: wrap;
+    }
+
+    .user-filter-controls .filter-group {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 6px;
+      flex: 1;
+      min-width: 160px;
+    }
+
+    .user-filter-controls label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    .user-filter-controls .select-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+      background-color: var(--color-bg-primary);
+      border: 1.5px solid var(--color-border);
+      border-radius: 6px;
+      height: 32px;
+      padding: 0 8px;
+      transition: all 0.2s ease;
+      flex: 1;
+    }
+
+    .user-filter-controls .select-wrapper:focus-within,
+    .user-filter-controls .select-wrapper:hover {
+      border-color: var(--color-accent-teal);
+    }
+
+    .user-filter-controls .select-icon {
+      color: var(--color-text-muted);
+      font-size: 16px;
+      margin-right: 4px;
+      pointer-events: none;
+    }
+
+    .user-filter-controls select {
+      border: none;
+      background: transparent;
+      outline: none;
+      font-family: var(--font-body);
+      font-size: 12.5px;
+      color: var(--color-text-primary);
+      width: 100%;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      padding-right: 20px;
+    }
+
+    .user-filter-controls select option {
+      background-color: var(--color-bg-primary);
+      color: var(--color-text-primary);
+      font-family: var(--font-body);
+      font-size: 13px;
+      padding: 8px;
+    }
+
+    .user-filter-controls .select-wrapper::after {
+      content: 'expand_more';
+      font-family: 'Material Icons';
+      position: absolute;
+      right: 8px;
+      color: var(--color-text-muted);
+      font-size: 16px;
+      pointer-events: none;
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), color 0.25s ease;
+    }
+
+    .user-filter-controls .select-wrapper:focus-within::after {
+      transform: rotate(180deg);
+      color: var(--color-accent-teal);
+    }
+
+    .user-filter-controls .clear-filters-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      background-color: transparent;
+      border: 1.5px solid var(--color-error);
+      color: var(--color-error);
+      padding: 0 12px;
+      height: 32px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .user-filter-controls .clear-filters-btn:hover {
+      background-color: var(--color-error);
+      color: white;
+    }
+
     .agent-search-bar {
       display: flex;
       align-items: center;
@@ -2846,6 +3148,131 @@ export interface Priority {
         opacity: 1;
       }
     }
+
+    /* Resolve Confirmation Modal Styles */
+    .confirm-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(51, 49, 67, 0.4);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1001;
+      backdrop-filter: blur(4px);
+      animation: modalFadeIn 0.2s ease-out;
+    }
+    
+    @keyframes modalFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    .confirm-modal-container {
+      background-color: #ffffff;
+      width: 380px;
+      max-width: 90%;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(51, 49, 67, 0.15);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      animation: modalScaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      border: 1px solid var(--color-border);
+    }
+    
+    @keyframes modalScaleIn {
+      from {
+        opacity: 0;
+        transform: scale(0.95) translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+    
+    .confirm-modal-content {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .confirm-modal-icon {
+      font-size: 48px;
+      color: var(--color-success);
+      background-color: rgba(76, 175, 130, 0.1);
+      padding: 12px;
+      border-radius: 50%;
+    }
+    
+    .confirm-modal-content h3 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--color-text-primary);
+      margin: 0;
+      font-family: var(--font-heading);
+    }
+    
+    .confirm-modal-content p {
+      font-size: 13.5px;
+      color: var(--color-text-muted);
+      line-height: 1.5;
+      margin: 0;
+      font-family: var(--font-body);
+    }
+    
+    .confirm-modal-actions {
+      display: flex;
+      gap: 12px;
+      width: 100%;
+      margin-top: 8px;
+    }
+    
+    .confirm-modal-actions button {
+      flex: 1;
+      height: 40px;
+      border-radius: 20px;
+      font-weight: 600;
+      font-size: 13.5px;
+      font-family: var(--font-heading);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: none;
+      outline: none;
+    }
+    
+    .confirm-modal-actions .cancel-confirm-btn {
+      background-color: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
+      color: var(--color-text-primary);
+    }
+    
+    .confirm-modal-actions .cancel-confirm-btn:hover {
+      background-color: var(--color-border);
+    }
+    
+    .confirm-modal-actions .accept-confirm-btn {
+      background-color: var(--color-success);
+      color: white;
+      box-shadow: 0 4px 12px rgba(76, 175, 130, 0.25);
+    }
+    
+    .confirm-modal-actions .accept-confirm-btn:hover {
+      background-color: #3e966e;
+      box-shadow: 0 6px 16px rgba(76, 175, 130, 0.35);
+      transform: translateY(-1px);
+    }
+    
+    .confirm-modal-actions .accept-confirm-btn:active {
+      transform: translateY(0);
+    }
   `]
 })
 
@@ -2861,6 +3288,8 @@ export class TicketsTabComponent implements OnInit {
 
   previousListMode = signal<'list' | 'archived'>('list');
   archivedTicketIds = signal<string[]>([]);
+  showResolveConfirmModal = signal(false);
+  ticketToResolveId = signal('');
 
   activeTickets = computed(() => {
     const all = this.ticketService.tickets();
@@ -2881,6 +3310,70 @@ export class TicketsTabComponent implements OnInit {
   readTicketIds = signal<string[]>([]);
   selectedStatusFilter = signal<'todos' | 'abierto' | 'en_progreso' | 'reabierto' | 'transferido' | 'resuelto'>('todos');
   searchQuery = signal<string>('');
+
+  // User filter signals
+  userSort = signal<'recent' | 'oldest' | 'priority' | 'alphabetical'>('recent');
+  userStatusFilter = signal<'all' | 'no_response' | 'in_progress' | 'open' | 'resolved'>('all');
+  userTagFilter = signal<string>('all');
+
+  userTags = computed(() => {
+    const role = this.currentUserRole();
+    if (role !== 'user') return [];
+
+    const all = this.ticketService.tickets();
+    const archivedIds = this.archivedTicketIds();
+    const isArchivedMode = this.innerViewMode() === 'archived';
+
+    // Collect tags from tickets that belong to the current list view (active vs archived)
+    const relevantTickets = all.filter(t => {
+      const isArchived = t.status === 'resuelto' && archivedIds.includes(t.id);
+      return isArchivedMode ? isArchived : !isArchived;
+    });
+
+    const tagsSet = new Set<string>();
+    for (const t of relevantTickets) {
+      if (t.tags) {
+        for (const tag of t.tags) {
+          tagsSet.add(tag);
+        }
+      }
+    }
+
+    const uniqueTags: string[] = [];
+    const seen = new Set<string>();
+    for (const tag of tagsSet) {
+      const cleaned = this.cleanTagName(tag);
+      if (!seen.has(cleaned)) {
+        seen.add(cleaned);
+        uniqueTags.push(tag);
+      } else {
+        const index = uniqueTags.findIndex(t => this.cleanTagName(t) === cleaned);
+        if (index !== -1 && tag.includes('ó') && !uniqueTags[index].includes('ó')) {
+          uniqueTags[index] = tag;
+        }
+      }
+    }
+    return uniqueTags.sort((a, b) => a.localeCompare(b));
+  });
+
+  hasActiveUserFilters = computed(() => {
+    const isArchived = this.innerViewMode() === 'archived';
+    return this.searchQuery() !== '' ||
+      this.userSort() !== 'recent' ||
+      (!isArchived && this.userStatusFilter() !== 'all') ||
+      this.userTagFilter() !== 'all';
+  });
+
+  clearUserFilters(): void {
+    this.searchQuery.set('');
+    this.userSort.set('recent');
+    this.userStatusFilter.set('all');
+    this.userTagFilter.set('all');
+  }
+
+  clearSearch(): void {
+    this.searchQuery.set('');
+  }
 
   lastSeenMessageTimes = signal<{ [ticketId: string]: string }>({});
   toastMessage = signal<string | null>(null);
@@ -3013,6 +3506,14 @@ export class TicketsTabComponent implements OnInit {
   // Attached files list
   attachments = signal<string[]>([]);
 
+  cleanTagName(str: string): string {
+    return (str || '')
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+  }
+
   // Get active tickets list from service with custom sorting and filters
   ticketsList = computed(() => {
     const all = this.ticketService.tickets();
@@ -3027,18 +3528,60 @@ export class TicketsTabComponent implements OnInit {
       if (role !== 'user') {
         archivedFiltered = archivedFiltered.filter(t => t.assigned_to === currentUserId);
       }
-      if (query) {
-        archivedFiltered = archivedFiltered.filter(t =>
-          t.title.toLowerCase().includes(query) ||
-          t.description.toLowerCase().includes(query) ||
-          t.institution.toLowerCase().includes(query)
-        );
+
+      if (role === 'user') {
+        if (query) {
+          archivedFiltered = archivedFiltered.filter(t =>
+            t.title.toLowerCase().includes(query) ||
+            t.description.toLowerCase().includes(query)
+          );
+        }
+        const tagFilter = this.userTagFilter();
+        if (tagFilter !== 'all') {
+          const cleanFilter = this.cleanTagName(tagFilter);
+          archivedFiltered = archivedFiltered.filter(t =>
+            t.tags.some(tag => this.cleanTagName(tag) === cleanFilter)
+          );
+        }
+
+        const sortVal = this.userSort();
+        return [...archivedFiltered].sort((a, b) => {
+          if (sortVal === 'oldest') {
+            return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          } else if (sortVal === 'priority') {
+            const getPriorityWeight = (prio: string) => {
+              switch (prio) {
+                case 'Crítica': return 4;
+                case 'Alta': return 3;
+                case 'Media': return 2;
+                case 'Baja': return 1;
+                default: return 0;
+              }
+            };
+            const weightA = getPriorityWeight(a.priority);
+            const weightB = getPriorityWeight(b.priority);
+            if (weightA !== weightB) {
+              return weightB - weightA;
+            }
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          } else {
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          }
+        });
+      } else {
+        if (query) {
+          archivedFiltered = archivedFiltered.filter(t =>
+            t.title.toLowerCase().includes(query) ||
+            t.description.toLowerCase().includes(query) ||
+            t.institution.toLowerCase().includes(query)
+          );
+        }
+        return [...archivedFiltered].sort((a, b) => {
+          const dateA = a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_at).getTime();
+          const dateB = b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_at).getTime();
+          return dateB - dateA;
+        });
       }
-      return [...archivedFiltered].sort((a, b) => {
-        const dateA = a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_at).getTime();
-        const dateB = b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_at).getTime();
-        return dateB - dateA;
-      });
     }
 
     let filtered = this.activeTickets();
@@ -3047,10 +3590,51 @@ export class TicketsTabComponent implements OnInit {
       if (query) {
         filtered = filtered.filter(t =>
           t.title.toLowerCase().includes(query) ||
-          t.description.toLowerCase().includes(query) ||
-          t.institution.toLowerCase().includes(query)
+          t.description.toLowerCase().includes(query)
         );
       }
+
+      const statusFilter = this.userStatusFilter();
+      if (statusFilter === 'open') {
+        filtered = filtered.filter(t => t.status === 'abierto');
+      } else if (statusFilter === 'in_progress') {
+        filtered = filtered.filter(t => t.status === 'en_progreso' || t.status === 'transferido' || t.status === 'reabierto');
+      } else if (statusFilter === 'resolved') {
+        filtered = filtered.filter(t => t.status === 'resuelto');
+      }
+
+      const tagFilter = this.userTagFilter();
+      if (tagFilter !== 'all') {
+        const cleanFilter = this.cleanTagName(tagFilter);
+        filtered = filtered.filter(t =>
+          t.tags.some(tag => this.cleanTagName(tag) === cleanFilter)
+        );
+      }
+
+      const sortVal = this.userSort();
+      return [...filtered].sort((a, b) => {
+        if (sortVal === 'oldest') {
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        } else if (sortVal === 'priority') {
+          const getPriorityWeight = (prio: string) => {
+            switch (prio) {
+              case 'Crítica': return 4;
+              case 'Alta': return 3;
+              case 'Media': return 2;
+              case 'Baja': return 1;
+              default: return 0;
+            }
+          };
+          const weightA = getPriorityWeight(a.priority);
+          const weightB = getPriorityWeight(b.priority);
+          if (weightA !== weightB) {
+            return weightB - weightA;
+          }
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        } else {
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        }
+      });
     } else {
       // Agent status tab filters
       if (filter === 'abierto') {
@@ -3247,6 +3831,7 @@ export class TicketsTabComponent implements OnInit {
   // Popups signals
   showCreateSuccess = signal(false);
   showReopenInfo = signal(false);
+  showTransferSuccess = signal(false);
 
   // Comments signals
   newCommentText = '';
@@ -3267,7 +3852,7 @@ export class TicketsTabComponent implements OnInit {
       const user = this.authService.currentUser();
       if (user) {
         this.initLastSeenTimes(user.id);
-        
+
         // Load user-scoped archived tickets
         try {
           const savedArchived = localStorage.getItem(`hsi_archived_tickets_${user.id}`);
@@ -4023,7 +4608,24 @@ export class TicketsTabComponent implements OnInit {
     this.ticketService.getTags().subscribe({
       next: (tags) => {
         if (tags && tags.length > 0) {
-          this.systemTags.set(tags);
+          // De-duplicate tags by name (case-insensitive and removing accents)
+          const seen = new Set<string>();
+          const uniqueTags: any[] = [];
+
+          for (const tag of tags) {
+            const cleaned = this.cleanTagName(tag.name);
+            if (!seen.has(cleaned)) {
+              seen.add(cleaned);
+              uniqueTags.push(tag);
+            } else {
+              // If we already saw the clean name, let's prefer the accented/correct version if current has it
+              const index = uniqueTags.findIndex(t => this.cleanTagName(t.name) === cleaned);
+              if (index !== -1 && tag.name.includes('ó') && !uniqueTags[index].name.includes('ó')) {
+                uniqueTags[index] = tag;
+              }
+            }
+          }
+          this.systemTags.set(uniqueTags);
         } else {
           this.setMockSystemTags();
         }
@@ -4043,7 +4645,7 @@ export class TicketsTabComponent implements OnInit {
       { id: '6a4bb000a9ad10c7c59df8a6', name: 'Odontología' },
       { id: '6a4bb000a9ad10c7c59df8a7', name: 'Snomed CT' },
       { id: '6a4bb000a9ad10c7c59df8a8', name: 'Administración' },
-      { id: '6a4bb000a9ad10c7c59df8a9', name: 'Facturacion' },
+      { id: '6a4cfe0a923044c942ffc27b', name: 'Facturación' },
       { id: '6a4bb000a9ad10c7c59df8aa', name: 'Turnos' }
     ]);
   }
@@ -4099,11 +4701,30 @@ export class TicketsTabComponent implements OnInit {
         };
         this.selectedTicket.set(parsed);
         this.closeTransferModal();
+        this.showTransferSuccess.set(true);
       },
       error: (err) => {
         console.error('Error transferring ticket:', err);
       }
     });
+  }
+
+  openResolveConfirmation(ticketId: string): void {
+    this.ticketToResolveId.set(ticketId);
+    this.showResolveConfirmModal.set(true);
+  }
+
+  closeResolveConfirmation(): void {
+    this.showResolveConfirmModal.set(false);
+    this.ticketToResolveId.set('');
+  }
+
+  confirmResolve(): void {
+    const id = this.ticketToResolveId();
+    if (id) {
+      this.changeStatusQuick(id, 'resuelto');
+    }
+    this.closeResolveConfirmation();
   }
 }
 

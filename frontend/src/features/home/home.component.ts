@@ -6,7 +6,7 @@ import { AboutComponent } from './components/about/about.component';
 import { TicketsTabComponent } from './components/tickets-tab/tickets-tab.component';
 import { TrainingComponent } from './components/training/training.component';
 import { ChatbotWidgetComponent } from '../chatbot/chatbot-widget.component';
-import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/router'; // 👈 IMPORTANTE
+import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } from '@angular/router'; // 👈 IMPORTANTE
 
 @Component({
   selector: 'app-home',
@@ -64,46 +64,27 @@ import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/rou
           >
             <span class="material-icons">archive</span>
           </div>
+
+          <!-- Capacitación (Both User and Agent) -->
+          <div 
+            class="sidebar-item" 
+            [class.active]="isTrainingActive()"
+            (click)="onTrainingClick()"
+            title="Capacitación"
+          >
+            <span class="material-icons">school</span>
+          </div>
         </div>
 
         <div class="sidebar-bottom">
           <div class="sidebar-item profile-btn" (click)="onLogout()" title="Cerrar sesión">
-            <span class="material-icons">account_circle</span>
-            <span class="tooltip">Salir</span>
+            <span class="material-icons">logout</span>
           </div>
         </div>
       </aside>
 
       <main class="main-content">
-        <nav class="nav-top">
-          <div class="pill-nav-container">
-            
-            <a 
-              class="pill-btn" 
-              routerLink="about" 
-              routerLinkActive="active"
-            >
-              Acerca del sistema
-            </a>
-            
-            <a 
-              class="pill-btn" 
-              routerLink="tickets" 
-              routerLinkActive="active"
-            >
-              Tickets
-            </a>
-            
-            <a 
-              class="pill-btn" 
-              routerLink="training" 
-              routerLinkActive="active"
-            >
-              Capacitación
-            </a>
-
-          </div>
-        </nav>
+        <div style="height: 24px; flex-shrink: 0;"></div>
 
         <div class="content-area">
           <div class="content-card">
@@ -139,6 +120,61 @@ import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/rou
           <div class="logout-actions">
             <button class="cancel-btn" (click)="cancelLogout()">Cancelar</button>
             <button class="accept-btn" (click)="confirmLogout()">Cerrar sesión</button>
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- About system modal (only shown once to new users) -->
+    @if (showAboutModal()) {
+      <div class="about-modal-overlay">
+        <div class="about-modal-dialog">
+          <div class="about-modal-header">
+            <span class="material-icons info-logo-icon">info</span>
+            <h3>¿Qué es el Sistema de Soporte de HSI?</h3>
+          </div>
+          
+          <div class="about-modal-body">
+            <p class="intro-text">
+              El Sistema de Soporte de HSI es la plataforma oficial para la gestión de consultas, reclamos e incidentes relacionados con la Historia de Salud Integrada en la Provincia de La Rioja. Permite reportar errores, solicitar asistencia técnica y hacer un seguimiento del estado de tus solicitudes de forma trazable y eficiente.
+            </p>
+
+            <div class="about-separator"></div>
+
+            <div class="chatbot-highlight-box">
+              <div class="box-header">
+                <h4>Asistente Virtual 24/7</h4>
+                <div class="mini-bot-icon">
+                  <span class="bot-face"></span>
+                </div>
+              </div>
+              <p class="box-description">
+                El chatbot está disponible las 24 horas para responder preguntas frecuentes, orientarte en el sistema y guiarte en la carga de tickets. Si tu consulta lo requiere, el asistente escalará automáticamente el caso a un agente de soporte.
+              </p>
+              
+              <ul class="capabilities-list">
+                <li>
+                  <span class="material-icons check-icon">check</span>
+                  <span>Respuestas a preguntas frecuentes</span>
+                </li>
+                <li>
+                  <span class="material-icons check-icon">check</span>
+                  <span>Guía de carga de tickets</span>
+                </li>
+                <li>
+                  <span class="material-icons check-icon">check</span>
+                  <span>Escalamiento a agente humano</span>
+                </li>
+                <li>
+                  <span class="material-icons check-icon">check</span>
+                  <span>Disponible sin necesidad de login</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+          
+          <div class="about-modal-actions">
+            <button class="accept-btn" (click)="closeAboutModal()">Comenzar</button>
           </div>
         </div>
       </div>
@@ -504,6 +540,206 @@ import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/rou
     .logout-actions .accept-btn:active {
       transform: translateY(0);
     }
+
+    /* About Modal Styles */
+    .about-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(51, 49, 67, 0.45);
+      backdrop-filter: blur(6px);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: aboutFadeIn 0.25s ease-out;
+    }
+
+    @keyframes aboutFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .about-modal-dialog {
+      background-color: var(--color-bg-primary);
+      padding: 36px;
+      border-radius: 20px;
+      width: 550px;
+      max-width: 90%;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--color-border);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      animation: aboutScaleIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes aboutScaleIn {
+      from {
+        opacity: 0;
+        transform: scale(0.92) translateY(15px);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+
+    .about-modal-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .info-logo-icon {
+      font-size: 32px;
+      color: var(--color-accent-teal);
+    }
+
+    .about-modal-header h3 {
+      margin: 0;
+      font-size: 22px;
+      font-family: var(--font-heading);
+      color: var(--color-text-primary);
+      font-weight: 700;
+    }
+
+    .about-modal-body {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .about-modal-body .intro-text {
+      margin: 0;
+      font-family: var(--font-body);
+      font-size: 14.5px;
+      line-height: 1.6;
+      color: var(--color-text-primary);
+    }
+
+    .about-separator {
+      height: 1px;
+      background-color: var(--color-border);
+      margin: 8px 0;
+    }
+
+    .about-modal-body .chatbot-highlight-box {
+      background-color: var(--color-bg-secondary);
+      border-radius: 12px;
+      padding: 20px;
+      border-left: 4px solid var(--bot-blue);
+      position: relative;
+    }
+
+    .about-modal-body .box-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .about-modal-body .box-header h4 {
+      margin: 0;
+      font-family: var(--font-heading);
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+    }
+
+    .about-modal-body .mini-bot-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-bot);
+      background: var(--bot-fab-gradient);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .about-modal-body .bot-face {
+      width: 12px;
+      height: 8px;
+      border: 1.5px solid white;
+      border-radius: 2px;
+      position: relative;
+    }
+    .about-modal-body .bot-face::before, .about-modal-body .bot-face::after {
+      content: '';
+      position: absolute;
+      width: 2.5px;
+      height: 2.5px;
+      background-color: var(--bot-yellow);
+      border-radius: 50%;
+      top: 1.5px;
+    }
+    .about-modal-body .bot-face::before { left: 1.5px; }
+    .about-modal-body .bot-face::after { right: 1.5px; }
+
+    .about-modal-body .box-description {
+      margin: 0 0 14px 0;
+      font-family: var(--font-body);
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--color-text-muted);
+    }
+
+    .about-modal-body .capabilities-list {
+      list-style: none;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 0;
+      margin: 0;
+    }
+
+    .about-modal-body .capabilities-list li {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-body);
+      font-size: 12.5px;
+      color: var(--color-text-primary);
+    }
+
+    .about-modal-body .check-icon {
+      color: var(--color-accent-teal);
+      font-size: 16px;
+      font-weight: bold;
+    }
+
+    .about-modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 8px;
+    }
+
+    .about-modal-actions .accept-btn {
+      padding: 12px 32px;
+      border-radius: 24px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: var(--font-heading);
+      font-size: 14.5px;
+      background-color: var(--color-accent-teal);
+      color: white;
+      box-shadow: 0 4px 12px rgba(119, 194, 216, 0.3);
+      transition: all 0.2s ease;
+    }
+
+    .about-modal-actions .accept-btn:hover {
+      background-color: var(--color-accent-teal-hover);
+      box-shadow: 0 6px 16px rgba(119, 194, 216, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .about-modal-actions .accept-btn:active {
+      transform: translateY(0);
+    }
   `]
 })
 export class HomeComponent {
@@ -515,14 +751,41 @@ export class HomeComponent {
   hasTickets = computed(() => this.ticketService.hasTickets());
   activeCount = computed(() => this.ticketService.activeCount());
   showLogoutConfirm = signal(false);
+  showAboutModal = signal(false);
 
   constructor() {
     effect(() => {
       const user = this.authService.currentUser();
       if (user) {
         this.ticketService.loadTicketsForUser(user.username);
+        this.checkAgentRedirect();
+
+        // Check if about popup has been shown for this user
+        if (typeof localStorage !== 'undefined') {
+          const aboutShownKey = `hsi_about_shown_${user.id}`;
+          const hasShown = localStorage.getItem(aboutShownKey);
+          if (!hasShown) {
+            this.showAboutModal.set(true);
+          }
+        }
       }
     });
+
+    this.router.events.subscribe((event) => {
+      if (event instanceof NavigationEnd) {
+        this.checkAgentRedirect();
+      }
+    });
+  }
+
+  checkAgentRedirect(): void {
+    const user = this.authService.currentUser();
+    if (user && (user.role === 'agent' || user.role === 'AGENT')) {
+      const currentUrl = this.router.url;
+      if (currentUrl === '/home' || currentUrl === '/home/about' || currentUrl === '/home/' || currentUrl.split('?')[0] === '/home/about') {
+        this.router.navigate(['/home/tickets']);
+      }
+    }
   }
 
   onHistoryIconClick(): void {
@@ -539,12 +802,20 @@ export class HomeComponent {
     this.router.navigate(['/home/tickets'], { queryParams: { view: 'archived' } });
   }
 
+  onTrainingClick(): void {
+    this.router.navigate(['/home/training']);
+  }
+
+  isTrainingActive(): boolean {
+    return this.router.url.includes('/home/training');
+  }
+
   isRouteActive(viewParam: 'list' | 'create' | 'archived'): boolean {
     if (!this.router.url.includes('/home/tickets')) return false;
-    
+
     const urlTree = this.router.parseUrl(this.router.url);
     const view = urlTree.queryParams['view'];
-    
+
     if (viewParam === 'list') {
       return (!view || view === 'list');
     }
@@ -553,6 +824,14 @@ export class HomeComponent {
 
   onChatbotCTAClick(): void {
     this.router.navigate(['/home/tickets'], { queryParams: { view: 'list' } });
+  }
+
+  closeAboutModal(): void {
+    const user = this.authService.currentUser();
+    if (user && typeof localStorage !== 'undefined') {
+      localStorage.setItem(`hsi_about_shown_${user.id}`, 'true');
+    }
+    this.showAboutModal.set(false);
   }
 
   onLogout(): void {

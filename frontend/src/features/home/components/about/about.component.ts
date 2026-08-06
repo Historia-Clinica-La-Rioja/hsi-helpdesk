@@ -156,4 +156,4 @@ import { CommonModule } from '@angular/common';
     }
   `]
 })
-export class AboutComponent {}
+export class AboutComponent { }
