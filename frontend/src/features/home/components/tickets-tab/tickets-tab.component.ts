@@ -3692,14 +3692,22 @@ export class TicketsTabComponent implements OnInit {
     });
   });
 
-  initReadTickets(): void {
+  initReadTickets(userId: string): void {
     try {
-      const stored = localStorage.getItem('read_ticket_ids');
+      const stored = localStorage.getItem(`read_ticket_ids_${userId}`);
       if (stored) {
         this.readTicketIds.set(JSON.parse(stored));
+      } else {
+        const legacy = localStorage.getItem('read_ticket_ids');
+        if (legacy) {
+          this.readTicketIds.set(JSON.parse(legacy));
+        } else {
+          this.readTicketIds.set([]);
+        }
       }
     } catch (e) {
       console.error('Error reading read_ticket_ids:', e);
+      this.readTicketIds.set([]);
     }
   }
 
@@ -3803,6 +3811,7 @@ export class TicketsTabComponent implements OnInit {
   isTicketNew(ticket: Ticket): boolean {
     if (ticket.status !== 'abierto') return false;
     if (ticket.assigned_to) return false;
+    if (this.isTicketRead(ticket.id)) return false;
     const hasAgentReply = ticket.messages?.some(m => m.role === 'agent') || false;
     return !hasAgentReply;
   }
@@ -3812,11 +3821,14 @@ export class TicketsTabComponent implements OnInit {
   }
 
   markTicketAsRead(ticketId: string): void {
+    const user = this.authService.currentUser();
+    if (!user) return;
+
     if (!this.readTicketIds().includes(ticketId)) {
       const updated = [...this.readTicketIds(), ticketId];
       this.readTicketIds.set(updated);
       try {
-        localStorage.setItem('read_ticket_ids', JSON.stringify(updated));
+        localStorage.setItem(`read_ticket_ids_${user.id}`, JSON.stringify(updated));
       } catch (e) {
         console.error('Error saving read_ticket_ids:', e);
       }
@@ -3845,13 +3857,13 @@ export class TicketsTabComponent implements OnInit {
 
   constructor() {
     this.initForm();
-    this.initReadTickets();
 
     // Load last seen times and archived tickets when user changes
     effect(() => {
       const user = this.authService.currentUser();
       if (user) {
         this.initLastSeenTimes(user.id);
+        this.initReadTickets(user.id);
 
         // Load user-scoped archived tickets
         try {

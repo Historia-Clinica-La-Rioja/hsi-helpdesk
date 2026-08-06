@@ -29,22 +29,22 @@ import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } fro
         </div>
 
         <div class="sidebar-middle">
-          <!-- Mis Tickets -->
-          <div 
-            class="sidebar-item" 
-            [class.active]="isRouteActive('list')"
-            [class.inactive]="currentUserRole() === 'user' && !hasTickets()"
-            (click)="onHistoryIconClick()"
-            [title]="currentUserRole() !== 'user' ? 'Ver mis tickets (' + activeCount() + ' activos)' : (hasTickets() ? 'Ver mis tickets (' + activeCount() + ' activos)' : 'Aún no tenés tickets enviados')"
-          >
-            <span class="material-icons">chat</span>
-            @if (activeCount() > 0) {
-              <span class="notification-badge">{{ activeCount() }}</span>
-            }
-          </div>
-
-          <!-- Crear nuevo ticket (User only) -->
           @if (currentUserRole() === 'user') {
+            <!-- Mis Tickets (User) -->
+            <div 
+              class="sidebar-item" 
+              [class.active]="isRouteActive('list')"
+              [class.inactive]="!hasTickets()"
+              (click)="onHistoryIconClick()"
+              [title]="hasTickets() ? 'Ver mis tickets (' + activeCount() + ' activos)' : 'Aún no tenés tickets enviados'"
+            >
+              <span class="material-icons">chat</span>
+              @if (activeCount() > 0) {
+                <span class="notification-badge">{{ activeCount() }}</span>
+              }
+            </div>
+
+            <!-- Crear nuevo ticket (User only) -->
             <div 
               class="sidebar-item" 
               [class.active]="isRouteActive('create')"
@@ -53,27 +53,60 @@ import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } fro
             >
               <span class="material-icons">add_box</span>
             </div>
+
+            <!-- Tickets archivados (User) -->
+            <div 
+              class="sidebar-item" 
+              [class.active]="isRouteActive('archived')"
+              (click)="onArchivedTicketsClick()"
+              title="Tickets archivados"
+            >
+              <span class="material-icons">archive</span>
+            </div>
+
+            <!-- Capacitación (User) -->
+            <div 
+              class="sidebar-item" 
+              [class.active]="isTrainingActive()"
+              (click)="onTrainingClick()"
+              title="Capacitación"
+            >
+              <span class="material-icons">school</span>
+            </div>
+          } @else {
+            <!-- Tickets List (Agent) -->
+            <div 
+              class="sidebar-item" 
+              [class.active]="isRouteActive('list')"
+              (click)="onHistoryIconClick()"
+              [title]="'Ver tickets de soporte (' + activeCount() + ' activos)'"
+            >
+              <span class="material-icons">local_activity</span>
+              @if (activeCount() > 0) {
+                <span class="notification-badge">{{ activeCount() }}</span>
+              }
+            </div>
+
+            <!-- Tickets archivados (Agent) -->
+            <div 
+              class="sidebar-item" 
+              [class.active]="isRouteActive('archived')"
+              (click)="onArchivedTicketsClick()"
+              title="Tickets archivados"
+            >
+              <span class="material-icons">archive</span>
+            </div>
+
+            <!-- Base de Conocimiento (Agent) -->
+            <div 
+              class="sidebar-item" 
+              [class.active]="isKnowledgeBaseActive()"
+              (click)="onKnowledgeBaseClick()"
+              title="Base de Conocimiento"
+            >
+              <span class="material-icons">menu_book</span>
+            </div>
           }
-
-          <!-- Tickets archivados (Both User and Agent) -->
-          <div 
-            class="sidebar-item" 
-            [class.active]="isRouteActive('archived')"
-            (click)="onArchivedTicketsClick()"
-            title="Tickets archivados"
-          >
-            <span class="material-icons">archive</span>
-          </div>
-
-          <!-- Capacitación (Both User and Agent) -->
-          <div 
-            class="sidebar-item" 
-            [class.active]="isTrainingActive()"
-            (click)="onTrainingClick()"
-            title="Capacitación"
-          >
-            <span class="material-icons">school</span>
-          </div>
         </div>
 
         <div class="sidebar-bottom">
@@ -745,7 +778,7 @@ import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } fro
 export class HomeComponent {
   private authService = inject(AuthService);
   private ticketService = inject(TicketService);
-  private router = inject(Router);
+  public router = inject(Router);
 
   currentUserRole = computed(() => this.authService.currentUser()?.role || '');
   hasTickets = computed(() => this.ticketService.hasTickets());
@@ -808,6 +841,14 @@ export class HomeComponent {
 
   isTrainingActive(): boolean {
     return this.router.url.includes('/home/training');
+  }
+
+  onKnowledgeBaseClick(): void {
+    this.router.navigate(['/home/knowledge-base']);
+  }
+
+  isKnowledgeBaseActive(): boolean {
+    return this.router.url.includes('/home/knowledge-base');
   }
 
   isRouteActive(viewParam: 'list' | 'create' | 'archived'): boolean {
