@@ -2,6 +2,8 @@ import { Component, Output, EventEmitter, signal, ElementRef, ViewChild, AfterVi
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HsiRobotLogoComponent } from '../../shared/components/hsi-robot-logo/hsi-robot-logo.component';
+import { TicketService } from '../../core/services/ticket.service';
 
 export interface Faq {
   id: string;
@@ -24,15 +26,11 @@ export interface ChatMessage {
 @Component({
   selector: 'app-chatbot-widget',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, HsiRobotLogoComponent],
   template: `
-    <div class="bot-fab-container" [class.hidden]="isOpen()">
-      <span class="bot-fab-label">ChatBot</span>
-      <button class="bot-fab animate-pulse-slow" (click)="toggleChat()">
-        <span class="notification-dot"></span>
-        <div class="fab-bot-icon">
-          <span class="bot-eyes"></span>
-        </div>
+    <div class="bot-fab-container" [class.hidden]="isOpen()" [style.bottom.px]="hasToastNotification() ? 120 : 32">
+      <button class="bot-fab animate-pulse-slow" (click)="toggleChat()" style="overflow: visible; display: flex; align-items: center; justify-content: center;">
+        <hsi-robot-logo size="72px" [followMouse]="true"></hsi-robot-logo>
       </button>
     </div>
 
@@ -60,8 +58,8 @@ export interface ChatMessage {
 
           <div class="chat-header">
             <div class="header-left">
-              <div class="header-bot-icon">
-                <span class="bot-eyes-mini"></span>
+              <div class="header-bot-icon" style="background: transparent; border: none; overflow: visible; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px;">
+                <hsi-robot-logo size="44px" [followMouse]="false"></hsi-robot-logo>
               </div>
               <div class="header-info">
                 <span class="bot-name">Asistente HSI</span>
@@ -89,11 +87,13 @@ export interface ChatMessage {
             @for (msg of messages(); track msg.id) {
               <div class="message-row" [ngClass]="msg.sender">
                 
-                @if (msg.sender === 'bot' || msg.sender === 'agent') {
-                  <div class="bot-avatar" [class.agent-avatar]="msg.sender === 'agent'">
-                    <span class="material-icons avatar-icon">
-                      {{ msg.sender === 'bot' ? 'smart_toy' : 'support_agent' }}
-                    </span>
+                @if (msg.sender === 'bot') {
+                  <div class="bot-avatar" style="background: transparent; border: none; overflow: visible; display: flex; align-items: center; justify-content: center; width: 34px; height: 34px;">
+                    <hsi-robot-logo size="34px" [followMouse]="false"></hsi-robot-logo>
+                  </div>
+                } @else if (msg.sender === 'agent') {
+                  <div class="bot-avatar agent-avatar">
+                    <span class="material-icons avatar-icon">support_agent</span>
                   </div>
                 }
 
@@ -125,8 +125,8 @@ export interface ChatMessage {
 
             @if (isTyping()) {
               <div class="message-row bot">
-                <div class="bot-avatar">
-                  <span class="material-icons avatar-icon">smart_toy</span>
+                <div class="bot-avatar" style="background: transparent; border: none; overflow: visible; display: flex; align-items: center; justify-content: center; width: 34px; height: 34px;">
+                  <hsi-robot-logo size="34px" [followMouse]="false"></hsi-robot-logo>
                 </div>
                 <div class="message-bubble bot-bubble typing-bubble">
                   <div class="typing-indicator">
@@ -169,7 +169,7 @@ export interface ChatMessage {
       align-items: center;
       gap: 6px;
       z-index: 999;
-      transition: opacity 0.2s ease, transform 0.2s ease;
+      transition: opacity 0.2s ease, transform 0.2s ease, bottom 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     .bot-fab-container.hidden {
@@ -187,24 +187,24 @@ export interface ChatMessage {
     }
 
     .bot-fab {
-      width: 64px;
-      height: 64px;
+      width: 72px;
+      height: 72px;
       border-radius: var(--radius-bot);
-      background: var(--bot-fab-gradient);
-      border: none;
+      background: transparent !important;
+      background-color: transparent !important;
+      box-shadow: none !important;
+      border: none !important;
       cursor: pointer;
       position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: var(--shadow-bot-fab);
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      transition: transform 0.2s ease;
       outline: none;
     }
 
     .bot-fab:hover {
       transform: scale(1.1);
-      box-shadow: 0 8px 24px rgba(64,141,243,0.55);
     }
 
     .notification-dot {
@@ -651,6 +651,9 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
   @ViewChild('inputTextarea') private inputTextarea!: ElementRef;
 
   private http = inject(HttpClient);
+  private ticketService = inject(TicketService);
+
+  hasToastNotification = computed(() => !!this.ticketService.toastMessage());
 
   isOpen = signal(sessionStorage.getItem('hsi_chat_open') === 'true');
   isTyping = signal(false);
