@@ -73,6 +73,8 @@ func main() {
 			// Protegemos estas rutas para evitar fuga de información (data scraping)
 			protected.GET("/institutions", institutionHandler.GetInstitutions)
 			protected.GET("/faqs", faqHandler.GetFaqs)
+			protected.POST("/faqs", faqHandler.CreateFaq)
+			protected.PUT("/faqs/:id", faqHandler.UpdateFaq)
 
 			tickets := protected.Group("/tickets")
 			{

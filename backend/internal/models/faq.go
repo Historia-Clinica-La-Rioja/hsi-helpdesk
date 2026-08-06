@@ -11,6 +11,7 @@ type Faq struct {
 	Questions string             `bson:"Questions" json:"questions"`
 	Answers   string             `bson:"Answers" json:"answers"`
 	IsActive  bool               `bson:"isActive" json:"is_active"`
+	Tags      []string           `bson:"tags" json:"tags"`
 	CreatedOn time.Time          `bson:"created_on" json:"created_on"`
 	UpdatedOn time.Time          `bson:"updated_on" json:"updated_on"`
 }

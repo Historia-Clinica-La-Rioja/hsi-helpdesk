@@ -47,6 +47,10 @@ export const routes: Routes = [
         loadComponent: () => import('../features/home/components/training/training.component').then(m => m.TrainingComponent)
       },
       {
+        path: 'knowledge-base',
+        loadComponent: () => import('../features/home/components/knowledge-base/knowledge-base.component').then(m => m.KnowledgeBaseComponent)
+      },
+      {
         path: '',
         redirectTo: 'tickets',
         pathMatch: 'full'
