@@ -1,0 +1,174 @@
+:host {
+  // ---- Paleta canica de vidrio (identidad HSI) ----
+  --hsi-c1: #eafcff;
+  --hsi-c2: #7fe3e8;
+  --hsi-c3: #33c2cf;
+  --hsi-c4: #2296b8;
+  --hsi-c5: #2f6fc4;
+
+  --hsi-ear-1: #4fd6da;
+  --hsi-ear-2: #1f7fa8;
+
+  --hsi-eye-1: #ffffff;
+  --hsi-eye-2: #f2fbff;
+  --hsi-eye-3: #cfeef2;
+
+  --hsi-antenna: #2f8fb0;
+  --hsi-smile: #5b8bff;
+  --hsi-aura: #7fe3e8;
+
+  // ---- Tiempos ----
+  --hsi-float-speed: 4s;
+  --hsi-float-distance: 12px;
+  --hsi-sway-speed: 6s;
+  --hsi-sway-angle: 2deg;
+  --hsi-wob-speed: 7s;        // balanceo 3D
+  --hsi-wob-angle: 11deg;     // amplitud del giro 3D
+  --hsi-antenna-speed: 2.6s;  // meneo de la antena
+  --hsi-antenna-angle: 7deg;
+  --hsi-hue-speed: 8s;
+  --hsi-hue-range: 14deg;
+  --hsi-shine-speed: 7s;
+  --hsi-blink-speed: 5.5s;
+  --hsi-aura-speed: 4s;
+  --hsi-enter-speed: 0.8s;    // animación de entrada
+
+  display: inline-block;
+  line-height: 0;
+}
+
+.hsi-robot-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hsi-aura {
+  position: absolute;
+  width: 78%;
+  height: 78%;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--hsi-aura) 45%, transparent), transparent 68%);
+  will-change: transform, opacity;
+  animation: hsi-aura-pulse var(--hsi-aura-speed) ease-in-out infinite;
+  pointer-events: none;
+}
+
+// Entrada (pop al montar la página)
+.hsi-anim {
+  will-change: transform, opacity;
+  animation: hsi-enter var(--hsi-enter-speed) cubic-bezier(0.2, 0.9, 0.25, 1.1) both;
+}
+
+// Balanceo 3D (giro suave en perspectiva)
+.hsi-3d {
+  transform-style: preserve-3d;
+  will-change: transform;
+  animation: hsi-wob var(--hsi-wob-speed) ease-in-out infinite;
+}
+
+.hsi-robot-svg {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  display: block;
+  filter: drop-shadow(0 6px 14px rgba(47, 111, 196, 0.22));
+}
+
+.hsi-sway {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hsi-sway var(--hsi-sway-speed) ease-in-out infinite;
+}
+
+.hsi-float {
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform;
+  animation: hsi-float var(--hsi-float-speed) ease-in-out infinite;
+}
+
+.hsi-antenna {
+  transform-box: fill-box;
+  transform-origin: bottom center;
+  animation: hsi-antenna var(--hsi-antenna-speed) ease-in-out infinite;
+}
+
+.hsi-body {
+  animation: hsi-hue var(--hsi-hue-speed) ease-in-out infinite;
+}
+
+.hsi-shine {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hsi-shine var(--hsi-shine-speed) ease-in-out infinite;
+}
+
+.hsi-eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hsi-blink var(--hsi-blink-speed) ease-in-out infinite;
+}
+
+@keyframes hsi-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(calc(var(--hsi-float-distance) * -1)); }
+}
+
+@keyframes hsi-sway {
+  0%, 100% { transform: rotate(calc(var(--hsi-sway-angle) * -1)); }
+  50% { transform: rotate(var(--hsi-sway-angle)); }
+}
+
+@keyframes hsi-wob {
+  0%, 100% { transform: perspective(900px) rotateY(calc(var(--hsi-wob-angle) * -1)) rotateX(4deg); }
+  50% { transform: perspective(900px) rotateY(var(--hsi-wob-angle)) rotateX(-3deg); }
+}
+
+@keyframes hsi-antenna {
+  0%, 100% { transform: rotate(calc(var(--hsi-antenna-angle) * -1)); }
+  50% { transform: rotate(var(--hsi-antenna-angle)); }
+}
+
+@keyframes hsi-hue {
+  0%, 100% { filter: hue-rotate(0deg); }
+  50% { filter: hue-rotate(var(--hsi-hue-range)); }
+}
+
+@keyframes hsi-shine {
+  0%, 100% { transform: translate(0, 0); opacity: 0.75; }
+  50% { transform: translate(18px, 14px); opacity: 0.4; }
+}
+
+@keyframes hsi-blink {
+  0%, 93%, 100% { transform: scaleY(1); }
+  96% { transform: scaleY(0.1); }
+  98% { transform: scaleY(1); }
+}
+
+@keyframes hsi-aura-pulse {
+  0%, 100% { transform: scale(0.85); opacity: 0.5; }
+  50% { transform: scale(1.1); opacity: 0.15; }
+}
+
+@keyframes hsi-enter {
+  0% { opacity: 0; transform: scale(0.35) translateY(-34px); }
+  60% { opacity: 1; transform: scale(1.07) translateY(6px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hsi-aura,
+  .hsi-anim,
+  .hsi-3d,
+  .hsi-sway,
+  .hsi-float,
+  .hsi-antenna,
+  .hsi-body,
+  .hsi-shine,
+  .hsi-eyes {
+    animation: none;
+  }
+}

@@ -42,6 +42,9 @@ export class TicketService {
 
   private allTickets = signal<Ticket[]>([]);
 
+  toastMessage = signal<string | null>(null);
+  toastTicketId = signal<string | null>(null);
+
   tickets = computed(() => this.allTickets());
   hasTickets = computed(() => this.allTickets().length > 0);
   activeCount = computed(() => this.allTickets().filter(t => 
