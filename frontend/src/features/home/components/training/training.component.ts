@@ -1,6 +1,7 @@
-import { Component, signal, computed } from '@angular/core';
+import { Component, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 
 export interface ResourceCard {
   id: string;
@@ -8,6 +9,7 @@ export interface ResourceCard {
   title: string;
   description: string;
   duration: number;
+  videoUrl?: string;
 }
 
 @Component({
@@ -47,10 +49,19 @@ export interface ResourceCard {
       <!-- Cards Grid -->
       <div class="resources-grid">
         @for (resource of filteredResources(); track resource.id) {
-          <div class="resource-card">
-            <!-- Video Placeholder -->
+          <div 
+            class="resource-card"
+            [class.has-video]="!!resource.videoUrl"
+            (click)="resource.videoUrl ? playVideo(resource) : null"
+          >
+            <!-- Video Thumbnail -->
             <div class="video-thumbnail">
-              <span class="material-icons play-icon">play_arrow</span>
+              @if (resource.videoUrl) {
+                <img [src]="getThumbnailUrl(resource.videoUrl)" class="thumbnail-img" alt="Video Preview" />
+                <span class="material-icons play-icon">play_arrow</span>
+              } @else {
+                <span class="material-icons lock-icon">lock_outline</span>
+              }
             </div>
             
             <div class="card-body">
@@ -63,13 +74,52 @@ export interface ResourceCard {
                   <span class="material-icons">schedule</span>
                   {{ resource.duration }} min
                 </span>
-                <button class="view-btn">Ver →</button>
+                @if (resource.videoUrl) {
+                  <button 
+                    class="view-btn" 
+                    (click)="$event.stopPropagation(); playVideo(resource)"
+                  >
+                    Ver →
+                  </button>
+                } @else {
+                  <span class="no-video-text">Próximamente</span>
+                }
               </div>
             </div>
           </div>
         }
       </div>
     </div>
+
+    <!-- Video Player Modal -->
+    @if (selectedVideo(); as video) {
+      <div class="video-modal-overlay" (click)="closeVideoPlayer()">
+        <div class="video-modal-container" (click)="$event.stopPropagation()">
+          <div class="video-modal-header">
+            <h3>{{ video.title }}</h3>
+            <button class="close-modal-btn" (click)="closeVideoPlayer()">
+              <span class="material-icons">close</span>
+            </button>
+          </div>
+          <div class="video-modal-body">
+            @if (safeVideoUrl()) {
+              <div class="iframe-container">
+                <iframe 
+                  [src]="safeVideoUrl()" 
+                  allow="autoplay; encrypted-media" 
+                  allowfullscreen>
+                </iframe>
+              </div>
+            } @else {
+              <div class="no-video-alert">
+                <span class="material-icons">error_outline</span>
+                <p>Este recurso no tiene un video disponible.</p>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    }
   `,
   styles: [`
     .training-container {
@@ -189,9 +239,14 @@ export interface ResourceCard {
       display: flex;
       flex-direction: column;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
+      cursor: default;
     }
 
-    .resource-card:hover {
+    .resource-card.has-video {
+      cursor: pointer;
+    }
+
+    .resource-card.has-video:hover {
       transform: translateY(-4px);
       box-shadow: 0 8px 20px rgba(51,49,67,0.1);
     }
@@ -213,11 +268,35 @@ export interface ResourceCard {
       padding: 4px;
       box-shadow: 0 2px 8px rgba(51,49,67,0.15);
       transition: transform 0.2s ease, color 0.2s ease;
+      z-index: 2;
     }
 
-    .resource-card:hover .play-icon {
+    .resource-card.has-video:hover .play-icon {
       transform: scale(1.1);
       color: var(--color-accent-teal-hover);
+    }
+
+    .lock-icon {
+      font-size: 32px;
+      color: var(--color-text-muted);
+      opacity: 0.6;
+    }
+
+    .thumbnail-img {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0.85;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      z-index: 1;
+    }
+
+    .resource-card.has-video:hover .thumbnail-img {
+      opacity: 1;
+      transform: scale(1.05);
     }
 
     .card-body {
@@ -300,15 +379,148 @@ export interface ResourceCard {
     .view-btn:hover {
       color: var(--color-accent-teal-hover);
     }
+
+    .no-video-text {
+      font-family: var(--font-body);
+      font-size: 12px;
+      color: var(--color-text-muted);
+      font-style: italic;
+    }
+
+    /* Video Modal */
+    .video-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      animation: fadeIn 0.2s ease-out;
+    }
+
+    .video-modal-container {
+      background-color: var(--color-bg-primary);
+      border-radius: var(--radius-card);
+      width: 90%;
+      max-width: 800px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--color-border);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .video-modal-header {
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .video-modal-header h3 {
+      font-family: var(--font-heading);
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+      margin: 0;
+    }
+
+    .close-modal-btn {
+      background: transparent;
+      border: none;
+      color: var(--color-text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+      border-radius: 50%;
+      transition: background-color 0.2s, color 0.2s;
+    }
+
+    .close-modal-btn:hover {
+      background-color: var(--color-bg-secondary);
+      color: var(--color-text-primary);
+    }
+
+    .video-modal-body {
+      padding: 0;
+      background-color: #000;
+    }
+
+    .iframe-container {
+      position: relative;
+      width: 100%;
+      padding-top: 56.25%; /* 16:9 Aspect Ratio */
+    }
+
+    .iframe-container iframe {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    .no-video-alert {
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: var(--color-text-muted);
+    }
+
+    .no-video-alert .material-icons {
+      font-size: 48px;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
   `]
 })
 export class TrainingComponent {
+  private sanitizer = inject(DomSanitizer);
+
   searchQuery = '';
   selectedFilter = signal<string>('Todos');
 
-  filters = ['Todos', 'Módulo Guardias', 'Turnos', 'Medicamentos', 'Facturación'];
+  filters = ['Todos', 'Módulo Guardias', 'Turnos', 'Medicamentos', 'Facturación', 'Seguridad'];
+
+  selectedVideo = signal<ResourceCard | null>(null);
+
+  safeVideoUrl = computed(() => {
+    const video = this.selectedVideo();
+    if (!video || !video.videoUrl) return null;
+    const embedUrl = this.getEmbedUrl(video.videoUrl);
+    return this.sanitizer.bypassSecurityTrustResourceUrl(embedUrl);
+  });
 
   resources: ResourceCard[] = [
+    {
+      id: 'res_2fa',
+      tag: 'Seguridad',
+      title: 'Autenticación del Doble Factor de Identidad (2FA)',
+      description: 'Guía paso a paso para configurar y utilizar la autenticación de doble factor en tu cuenta del sistema HSI.',
+      duration: 5,
+      videoUrl: 'https://drive.google.com/file/d/1QN1a70OqP1z-Isz05xKSgioYMykgbCYD/view?usp=sharing'
+    },
     {
       id: 'res_1',
       tag: 'Módulo Guardias',
@@ -363,4 +575,30 @@ export class TrainingComponent {
       return matchesSearch && matchesFilter;
     });
   });
+
+  playVideo(video: ResourceCard) {
+    this.selectedVideo.set(video);
+  }
+
+  closeVideoPlayer() {
+    this.selectedVideo.set(null);
+  }
+
+  getThumbnailUrl(url: string): string | null {
+    const regExp = /\/file\/d\/([a-zA-Z0-9_-]+)/;
+    const match = url.match(regExp);
+    if (match && match[1]) {
+      return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w400`;
+    }
+    return null;
+  }
+
+  private getEmbedUrl(url: string): string {
+    const regExp = /\/file\/d\/([a-zA-Z0-9_-]+)/;
+    const match = url.match(regExp);
+    if (match && match[1]) {
+      return `https://drive.google.com/file/d/${match[1]}/preview`;
+    }
+    return url;
+  }
 }
