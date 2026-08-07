@@ -59,6 +59,7 @@ export interface ResourceCard {
               @if (resource.videoUrl) {
                 <img [src]="getThumbnailUrl(resource.videoUrl)" class="thumbnail-img" alt="Video Preview" />
                 <span class="material-icons play-icon">play_arrow</span>
+                <span class="video-duration-badge">{{ resource.duration }} min</span>
               } @else {
                 <span class="material-icons lock-icon">lock_outline</span>
               }
@@ -258,6 +259,20 @@ export interface ResourceCard {
       align-items: center;
       justify-content: center;
       position: relative;
+    }
+
+    .video-duration-badge {
+      position: absolute;
+      bottom: 8px;
+      right: 8px;
+      background-color: rgba(0, 0, 0, 0.75);
+      color: white;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: var(--font-body);
+      font-size: 11px;
+      font-weight: 500;
+      z-index: 2;
     }
 
     .play-icon {
