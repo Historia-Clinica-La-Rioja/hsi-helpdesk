@@ -49,10 +49,10 @@ export class TicketService {
 
   tickets = computed(() => this.allTickets());
   hasTickets = computed(() => this.allTickets().length > 0);
-  activeCount = computed(() => this.allTickets().filter(t => 
-    t.status === 'abierto' || 
-    t.status === 'en_progreso' || 
-    t.status === 'reabierto' || 
+  activeCount = computed(() => this.allTickets().filter(t =>
+    t.status === 'abierto' ||
+    t.status === 'en_progreso' ||
+    t.status === 'reabierto' ||
     t.status === 'transferido'
   ).length);
 

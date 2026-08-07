@@ -3935,7 +3935,7 @@ export class TicketsTabComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private initialViewDecided = false;
-  
+
   @ViewChild('commentsList') commentsList?: ElementRef<HTMLDivElement>;
 
   scrollToBottom(): void {
