@@ -12,9 +12,10 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o server ./cmd/serv
 
 FROM gcr.io/distroless/static-debian12
 
-WORKDIR /root/
+WORKDIR /app/
 
 COPY --from=builder /app/server .
+COPY --from=builder /app/public ./public 
 
 EXPOSE 8080
 

@@ -1,13 +1,12 @@
 package services
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"strings"
-	"time"
 
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/models"
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/repositories"
@@ -17,7 +16,7 @@ import (
 
 type AuthService interface {
 	AuthenticateUser(username, role, dni, password string) (string, error)
-	AuthenticateSSO(hsiToken string, role string) (string, error) // <-- Quitamos el parámetro username
+	AuthenticateSSO(hsiToken string, role string) (string, error) 
 }
 
 type authService struct {
@@ -32,61 +31,83 @@ func NewAuthService(repo repositories.UserRepository, hsiApiUrl string) AuthServ
 	}
 }
 
-func (s *authService) AuthenticateSSO(hsiToken string, role string) (string, error) {
+func (s *authService) AuthenticateSSO(base64Payload string, role string) (string, error) {
+	decodedBytes, err := base64.StdEncoding.DecodeString(base64Payload)
+	if err != nil {
+		log.Printf("❌ Error al decodificar Base64: %v", err)
+		return "", errors.New("datos de identidad inválidos")
+	}
+
+	// 2. Parsear el JSON de HSI directamente en memoria
 	var hsiData struct {
-		ID        int `json:"id"`
+		ID        int    `json:"id"`
+		Username  string `json:"username"`
+		Email     string `json:"email"`
 		PersonDto struct {
-			FirstName string `json:"firstName"`
-			LastName  string `json:"lastName"`
+			FirstName            string `json:"firstName"`
+			LastName             string `json:"lastName"`
+			IdentificationNumber string `json:"identificationNumber"`
 		} `json:"personDto"`
 	}
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	
-	log.Printf("Intentando conectar con HSI en: %s", s.hsiApiUrl)
-	req, _ := http.NewRequest("GET", s.hsiApiUrl, nil)
-	req.Header.Set("Authorization", "Bearer "+hsiToken)
-	
-	resp, reqErr := client.Do(req)
+	if err := json.Unmarshal(decodedBytes, &hsiData); err != nil {
+		log.Printf("❌ Error al parsear JSON del perfil: %v", err)
+		return "", errors.New("formato de perfil incorrecto")
+	}
 
-	if reqErr != nil || resp == nil || resp.StatusCode != http.StatusOK {
-		if reqErr != nil {
-			log.Printf("❌ Error de red con HSI en %s: %v", s.hsiApiUrl, reqErr)
-		} else if resp != nil {
-			log.Printf("⚠️ HSI rechazó el token. Status Code: %d", resp.StatusCode)
+	log.Printf("✅ ¡Identidad delegada recibida! Usuario: %s %s (DNI: %s)", hsiData.PersonDto.FirstName, hsiData.PersonDto.LastName, hsiData.PersonDto.IdentificationNumber)
+
+	searchIdentifier := hsiData.Email
+	if searchIdentifier == "" {
+		searchIdentifier = hsiData.Username
+	}
+
+	var user *models.User
+	var dbErr error
+
+	if searchIdentifier != "" {
+		user, dbErr = s.userRepo.FindByUsername(searchIdentifier)
+	}
+
+	if dbErr != nil || user == nil {
+		log.Printf("El usuario no existe en la BD de tickets. Auto-aprovisionando...")
+		
+		firstName := hsiData.PersonDto.FirstName
+		lastName := hsiData.PersonDto.LastName
+		if firstName == "" && lastName == "" {
+			firstName = "Usuario"
+			lastName = "HSI"
 		}
-		return "", errors.New("el token de HSI fue rechazado o está expirado")
-	}
-	defer resp.Body.Close()
 
-	log.Printf("✅ ¡Conexión exitosa con HSI!")
+		if searchIdentifier == "" {
+			searchIdentifier = fmt.Sprintf("hsi_user_%d@hsi.local", hsiData.ID)
+		}
 
-	if err := json.NewDecoder(resp.Body).Decode(&hsiData); err != nil {
-		return "", errors.New("error al leer el perfil desde HSI")
-	}
-
-	username := fmt.Sprintf("hsi_user_%d", hsiData.ID)
-
-	user, err := s.userRepo.FindByUsername(username)
-	if err != nil {
-		log.Printf("Usuario %s no existe en BD. Iniciando auto-aprovisionamiento...", username)
 		newUser := models.User{
-			Username:  username,
-			Role:      role,
-			FirstName: hsiData.PersonDto.FirstName,
-			LastName:  hsiData.PersonDto.LastName,
+			Username:  searchIdentifier,
+			Role:      models.RoleUser,
+			IsActive:  true,
+			FirstName: firstName,
+			LastName:  lastName,
+			DNI:       hsiData.PersonDto.IdentificationNumber,
 		}
 
 		createdUser, createErr := s.userRepo.Create(&newUser)
 		if createErr != nil {
-			return "", errors.New("no se pudo registrar el usuario en el sistema de tickets")
+			return "", errors.New("no se pudo registrar el usuario")
 		}
 		user = createdUser
-		log.Printf("✅ Usuario %s creado exitosamente en Mongo.", username)
 	}
 
-	token, err := jwt.GenerateToken(user.ID.Hex(), user.Role)
-	if err != nil {
+	userRole := models.RoleUser
+	if user.Role == models.RoleAgent || user.Role == models.RoleOwner {
+		userRole = models.RoleUser 
+	} else if user.Role != "" {
+		userRole = user.Role
+	}
+
+	token, jwtErr := jwt.GenerateToken(user.ID.Hex(), userRole)
+	if jwtErr != nil {
 		return "", errors.New("error al generar el token interno")
 	}
 

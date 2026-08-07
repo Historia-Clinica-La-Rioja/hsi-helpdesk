@@ -30,6 +30,10 @@ export const routes: Routes = [
     loadComponent: () => import('../features/auth/login.component').then(m => m.LoginComponent)
   },
   {
+    path: 'sso-redirect',
+    loadComponent: () => import('../features/auth/sso-redirect/sso-redirect').then(m => m.SsoRedirectComponent)
+  },
+  {
     path: 'home',
     canActivate: [authGuard],
     loadComponent: () => import('../features/home/home.component').then(m => m.HomeComponent),
