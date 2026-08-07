@@ -1,5 +1,5 @@
 
-import { Component, Input, Output, EventEmitter, inject, signal, computed, effect, OnInit, DestroyRef } from '@angular/core';
+import { Component, Input, Output, EventEmitter, inject, signal, computed, effect, OnInit, DestroyRef, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
@@ -10,6 +10,7 @@ import { AuthService } from '../../../../core/services/auth.service';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { interval, Subscription } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
+import { Faq } from '../knowledge-base/knowledge-base.component';
 
 export interface Institution {
   _id: string;
@@ -802,7 +803,8 @@ export interface Priority {
               <!-- Comments / Message History Thread Section -->
               <div class="comments-section">
                 <h3>Historial de Mensajes y Respuestas</h3>
-                <div class="comments-list">
+
+                <div class="comments-list" #commentsList>
                   <!-- Render custom messages/comments -->
                   @for (comment of ticketComments(); track comment.id) {
                     @if (comment.role === 'system') {
@@ -834,9 +836,19 @@ export interface Priority {
                       [placeholder]="currentUserRole() === 'user' ? 'Escribí un comentario o respuesta para el equipo de soporte...' : 'Escribí una respuesta o comentario para el usuario...'"
                       required
                     ></textarea>
-                    <button type="submit" class="comment-submit-btn" [disabled]="!newCommentText.trim() || isSendingComment()">
-                      Enviar Comentario
-                    </button>
+                    <div class="comment-actions-row">
+                      <div class="comment-actions-left">
+                        @if (currentUserRole() !== 'user') {
+                          <button type="button" class="kb-shortcut-btn" (click)="openKbPopup()" title="Respuestas Rápidas">
+                            <span class="material-icons">menu_book</span>
+                            <span>Respuestas Rápidas</span>
+                          </button>
+                        }
+                      </div>
+                      <button type="submit" class="comment-submit-btn" [disabled]="!newCommentText.trim() || isSendingComment()">
+                        Enviar Comentario
+                      </button>
+                    </div>
                   </form>
                 } @else {
                   <div class="comment-blocked-message" style="margin-top: 15px; padding: 15px; background: #FFF9C4; border-radius: 8px; color: #5D4037; font-weight: 500; text-align: center; border: 1px solid #FFF59D; display: flex; align-items: center; justify-content: center; gap: 8px;">
@@ -1069,9 +1081,152 @@ export interface Priority {
         </div>
       }
 
+      <!-- Knowledge Base Shortcut Modal -->
+      @if (showKbPopup()) {
+        <div class="kb-popup-overlay" (click)="closeKbPopup()">
+          <div class="kb-popup-container" (click)="$event.stopPropagation()">
+            <div class="kb-popup-header">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="material-icons" style="color: var(--color-accent-teal);">menu_book</span>
+                <h3>Base de Conocimiento</h3>
+              </div>
+              <button type="button" class="close-modal-btn" (click)="closeKbPopup()">
+                <span class="material-icons">close</span>
+              </button>
+            </div>
+            
+            <div class="kb-popup-body-split">
+              <!-- Left panel: Search & Categories -->
+              <div class="kb-popup-left-panel">
+                <div class="kb-popup-search-wrapper">
+                  <span class="material-icons search-icon">search</span>
+                  <input 
+                    type="text" 
+                    [ngModel]="kbSearchQuery()" 
+                    (ngModelChange)="kbSearchQuery.set($event)"
+                    placeholder="Buscar por pregunta, respuesta o etiqueta..."
+                  />
+                </div>
+
+                <div class="kb-popup-navigation-content">
+                  @if (kbSearchQuery()) {
+                    <div class="search-results-header">
+                      <span class="results-title">Resultados de búsqueda</span>
+                      <span class="results-count">({{ kbFilteredFaqs().length }} encontrados)</span>
+                    </div>
+                    
+                    <div class="search-results-list">
+                      @for (faq of kbFilteredFaqs(); track faq.id) {
+                        <div 
+                          class="search-faq-item" 
+                          [class.active]="kbSelectedFaq()?.id === faq.id"
+                          (click)="selectKbFaq(faq)"
+                        >
+                          <span class="material-icons doc-icon">description</span>
+                          <div class="search-faq-info">
+                            <span class="search-faq-title">{{ faq.questions }}</span>
+                            <span class="search-faq-path">{{ faq.label }}</span>
+                          </div>
+                        </div>
+                      } @empty {
+                        <div class="empty-search-state">
+                          <span class="material-icons">search_off</span>
+                          <p>No se encontraron artículos.</p>
+                        </div>
+                      }
+                    </div>
+                  } @else {
+                    <span class="panel-section-title">CATEGORÍAS</span>
+                    <div class="categories-tree-container">
+                      <ng-container *ngTemplateOutlet="kbCategoryTemplate; context: { nodes: kbCategoryTree(), depth: 0 }"></ng-container>
+                    </div>
+                  }
+                </div>
+              </div>
+
+              <!-- Right panel: Preview & insert -->
+              <div class="kb-popup-right-panel">
+                @if (kbSelectedFaq(); as faq) {
+                  <div class="kb-faq-preview-card">
+                    <div class="preview-header">
+                      <h4>{{ faq.questions }}</h4>
+                      <span class="preview-category-path">{{ faq.label }}</span>
+                    </div>
+
+                    @if (faq.tags && faq.tags.length > 0) {
+                      <div class="preview-tags-row">
+                        @for (tag of faq.tags; track tag) {
+                          <span class="tag-pill">{{ tag }}</span>
+                        }
+                      </div>
+                    }
+
+                    <div class="preview-divider"></div>
+
+                    <div class="preview-content-scroll">
+                      <p class="preview-answer-text">{{ faq.answers }}</p>
+                    </div>
+
+                    <div class="preview-footer-actions">
+                      <button type="button" class="insert-response-btn" (click)="insertKbAnswer(faq)">
+                        <span class="material-icons">drive_file_rename_outline</span>
+                        Insertar respuesta
+                      </button>
+                    </div>
+                  </div>
+                } @else {
+                  <div class="kb-faq-preview-empty">
+                    <span class="material-icons empty-icon">menu_book</span>
+                    <p>Seleccioná una pregunta para previsualizar y pegar como respuesta.</p>
+                  </div>
+                }
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- Recursive category tree template for KB shortcut popup -->
+      <ng-template #kbCategoryTemplate let-nodes="nodes" let-depth="depth">
+        @for (node of nodes; track node.fullName) {
+          <div class="category-node" [style.padding-left.px]="depth * 12">
+            <div class="category-item-row" (click)="toggleKbNode(node)">
+              <span class="material-icons expand-arrow" [class.rotated]="node.isExpanded">
+                chevron_right
+              </span>
+              <span class="material-icons folder-icon" [class.open]="node.isExpanded">
+                {{ node.isExpanded ? 'folder_open' : 'folder' }}
+              </span>
+              <span class="category-name-text">{{ node.name }}</span>
+              <span class="category-count-badge">{{ node.totalCount }}</span>
+            </div>
+            
+            @if (node.isExpanded) {
+              <!-- Render Nested Subcategories -->
+              @if (node.subcategories.length > 0) {
+                <ng-container *ngTemplateOutlet="kbCategoryTemplate; context: { nodes: node.subcategories, depth: depth + 1 }"></ng-container>
+              }
+              
+              <!-- Render FAQs under this specific node -->
+              @for (faq of node.faqs; track faq.id) {
+                <div 
+                  class="faq-leaf-row" 
+                  [class.active]="kbSelectedFaq()?.id === faq.id"
+                  [style.padding-left.px]="(depth + 1) * 12 + 16"
+                  (click)="selectKbFaq(faq)"
+                >
+                  <span class="material-icons leaf-doc-icon">description</span>
+                  <span class="faq-leaf-title">{{ faq.questions }}</span>
+                </div>
+              }
+            }
+          </div>
+        }
+      </ng-template>
+
       <!-- Floating Toast Notification -->
       @if (toastMessage(); as message) {
-        <div class="toast-notification" (click)="goToTicketFromToast()">
+        <div class="toast-notification" [class.chatbot-open]="isChatOpen()" (click)="goToTicketFromToast()">
           <span class="material-icons toast-icon">notifications_active</span>
           <div class="toast-content">
             <span class="toast-title">Nueva respuesta</span>
@@ -1946,6 +2101,7 @@ export interface Priority {
       font-size: 13px;
       color: var(--color-text-primary);
       line-height: 1.5;
+      white-space: pre-wrap;
     }
 
     .add-comment-form {
@@ -1955,7 +2111,7 @@ export interface Priority {
     }
 
     .add-comment-form textarea {
-      height: 70px;
+      height: 120px;
       padding: 10px;
     }
 
@@ -3084,6 +3240,10 @@ export interface Priority {
       transition: all 0.2s ease;
     }
 
+    .toast-notification.chatbot-open {
+      bottom: 600px;
+    }
+
     .toast-notification:hover {
       transform: translateY(-2px);
       box-shadow: 0 20px 40px rgba(51, 49, 67, 0.25);
@@ -3273,6 +3433,495 @@ export interface Priority {
     .confirm-modal-actions .accept-confirm-btn:active {
       transform: translateY(0);
     }
+
+    /* KB Shortcut button and action row */
+    .comment-actions-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      margin-top: 8px;
+    }
+
+    .kb-shortcut-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 36px;
+      padding: 0 16px;
+      border-radius: 18px;
+      border: 1px solid var(--color-border);
+      background-color: var(--color-bg-primary);
+      color: var(--color-text-muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+      font-family: var(--font-heading);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .kb-shortcut-btn:hover {
+      background-color: var(--color-bg-secondary);
+      border-color: var(--color-accent-teal);
+      color: var(--color-accent-teal);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+    }
+
+    .kb-shortcut-btn:active {
+      transform: translateY(0);
+    }
+
+    /* KB Popup Styles */
+    .kb-popup-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(51, 49, 67, 0.45);
+      backdrop-filter: blur(6px);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: modalFadeIn 0.2s ease-out;
+    }
+
+    .kb-popup-container {
+      background-color: var(--color-bg-primary);
+      border-radius: var(--radius-card);
+      width: 850px;
+      max-width: 95%;
+      height: 550px;
+      max-height: 90vh;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--color-border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      animation: modalScaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .kb-popup-header {
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .kb-popup-header h3 {
+      font-family: var(--font-heading);
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--color-text-primary);
+      margin: 0;
+    }
+
+    .kb-popup-body-split {
+      display: grid;
+      grid-template-columns: 350px 1fr;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .kb-popup-left-panel {
+      border-right: 1px solid var(--color-border);
+      display: flex;
+      flex-direction: column;
+      background-color: var(--color-bg-secondary);
+      overflow: hidden;
+    }
+
+    .kb-popup-search-wrapper {
+      padding: 16px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      background-color: var(--color-bg-primary);
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .kb-popup-search-wrapper .search-icon {
+      position: absolute;
+      left: 28px;
+      color: var(--color-text-muted);
+      font-size: 18px;
+    }
+
+    .kb-popup-search-wrapper input {
+      width: 100%;
+      height: 38px;
+      padding: 0 12px 0 36px;
+      border: 1.5px solid var(--color-border);
+      border-radius: var(--radius-input);
+      font-family: var(--font-body);
+      font-size: 13px;
+      color: var(--color-text-primary);
+      background-color: var(--color-bg-secondary);
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .kb-popup-search-wrapper input:focus {
+      border-color: var(--color-accent-teal);
+      background-color: var(--color-bg-primary);
+      box-shadow: 0 0 0 3px rgba(119, 194, 216, 0.1);
+    }
+
+    .kb-popup-navigation-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .kb-popup-right-panel {
+      display: flex;
+      flex-direction: column;
+      background-color: var(--color-bg-primary);
+      overflow: hidden;
+    }
+
+    /* FAQ Preview Card inside popup */
+    .kb-faq-preview-card {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      box-sizing: border-box;
+    }
+
+    .kb-faq-preview-card .preview-header {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 12px;
+      text-align: left;
+    }
+
+    .kb-faq-preview-card .preview-header h4 {
+      font-family: var(--font-heading);
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--color-text-primary);
+      margin: 0;
+      line-height: 1.4;
+      text-align: left;
+    }
+
+    .kb-faq-preview-card .preview-category-path {
+      font-family: var(--font-body);
+      font-size: 11px;
+      color: var(--color-text-muted);
+      text-align: left;
+    }
+
+    .kb-faq-preview-card .preview-tags-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .kb-faq-preview-card .preview-divider {
+      height: 1px;
+      background-color: var(--color-border);
+      margin-bottom: 16px;
+    }
+
+    .kb-faq-preview-card .preview-content-scroll {
+      flex: 1;
+      overflow-y: auto;
+      margin-bottom: 20px;
+      padding-right: 8px;
+    }
+
+    .kb-faq-preview-card .preview-answer-text {
+      font-family: var(--font-body);
+      font-size: 13.5px;
+      line-height: 1.6;
+      color: var(--color-text-primary);
+      white-space: pre-wrap;
+      margin: 0;
+      text-align: left;
+    }
+
+    .kb-faq-preview-card .preview-footer-actions {
+      display: flex;
+      justify-content: flex-end;
+      border-top: 1px solid var(--color-border);
+      padding-top: 16px;
+    }
+
+    .insert-response-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 40px;
+      padding: 0 20px;
+      background-color: var(--color-accent-teal);
+      color: white;
+      border: none;
+      border-radius: 20px;
+      font-family: var(--font-heading);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(119, 194, 216, 0.25);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .insert-response-btn:hover {
+      background-color: var(--color-accent-teal-hover);
+      box-shadow: 0 6px 16px rgba(119, 194, 216, 0.35);
+      transform: translateY(-1px);
+    }
+
+    .insert-response-btn:active {
+      transform: translateY(0);
+    }
+
+    .kb-faq-preview-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      gap: 12px;
+      color: var(--color-text-muted);
+      padding: 40px;
+      text-align: center;
+    }
+
+    .kb-faq-preview-empty .empty-icon {
+      font-size: 44px;
+      color: var(--color-accent-teal);
+      opacity: 0.5;
+    }
+
+    .kb-faq-preview-empty p {
+      font-family: var(--font-body);
+      font-size: 13.5px;
+      font-weight: 500;
+      margin: 0;
+    }
+
+    /* KB tree styles inside popup */
+    .kb-popup-left-panel .category-node {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .kb-popup-left-panel .category-item-row {
+      display: flex;
+      align-items: center;
+      height: 34px;
+      padding: 0 8px;
+      border-radius: var(--radius-input);
+      cursor: pointer;
+      transition: background-color 0.15s ease;
+      user-select: none;
+    }
+
+    .kb-popup-left-panel .category-item-row:hover {
+      background-color: var(--color-bg-primary);
+    }
+
+    .kb-popup-left-panel .expand-arrow {
+      font-size: 18px;
+      color: var(--color-text-muted);
+      transition: transform 0.2s ease;
+      margin-right: 4px;
+    }
+
+    .kb-popup-left-panel .expand-arrow.rotated {
+      transform: rotate(90deg);
+    }
+
+    .kb-popup-left-panel .folder-icon {
+      font-size: 18px;
+      color: var(--color-accent-teal);
+      margin-right: 8px;
+    }
+
+    .kb-popup-left-panel .category-name-text {
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: left;
+    }
+
+    .kb-popup-left-panel .category-count-badge {
+      font-family: var(--font-heading);
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--color-text-muted);
+      margin-left: 8px;
+    }
+
+    .kb-popup-left-panel .faq-leaf-row {
+      display: flex;
+      align-items: center;
+      height: 32px;
+      padding: 0 10px;
+      border-radius: var(--radius-input);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .kb-popup-left-panel .faq-leaf-row:hover {
+      background-color: var(--color-bg-primary);
+    }
+
+    .kb-popup-left-panel .faq-leaf-row.active {
+      background-color: rgba(119, 194, 216, 0.12);
+    }
+
+    .kb-popup-left-panel .leaf-doc-icon {
+      font-size: 16px;
+      color: var(--color-text-muted);
+      opacity: 0.6;
+      margin-right: 8px;
+    }
+
+    .kb-popup-left-panel .faq-leaf-row.active .leaf-doc-icon {
+      color: var(--color-accent-teal-hover);
+      opacity: 1;
+    }
+
+    .kb-popup-left-panel .faq-leaf-title {
+      font-family: var(--font-body);
+      font-size: 12.5px;
+      color: var(--color-text-muted);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: left;
+    }
+
+    .kb-popup-left-panel .faq-leaf-row.active .faq-leaf-title {
+      color: var(--color-text-primary);
+      font-weight: 500;
+    }
+
+    /* Flat Search Results List styling in popup */
+    .kb-popup-left-panel .search-results-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .kb-popup-left-panel .results-title {
+      font-family: var(--font-heading);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+    }
+
+    .kb-popup-left-panel .results-count {
+      font-family: var(--font-body);
+      font-size: 11px;
+      color: var(--color-text-muted);
+    }
+
+    .kb-popup-left-panel .search-results-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .kb-popup-left-panel .search-faq-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: var(--radius-input);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      background-color: var(--color-bg-primary);
+    }
+
+    .kb-popup-left-panel .search-faq-item:hover {
+      background-color: rgba(119, 194, 216, 0.05);
+    }
+
+    .kb-popup-left-panel .search-faq-item.active {
+      background-color: rgba(119, 194, 216, 0.12);
+    }
+
+    .kb-popup-left-panel .doc-icon {
+      font-size: 18px;
+      color: var(--color-text-muted);
+      margin-top: 2px;
+    }
+
+    .kb-popup-left-panel .search-faq-item.active .doc-icon {
+      color: var(--color-accent-teal);
+    }
+
+    .kb-popup-left-panel .search-faq-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1;
+      min-width: 0;
+      text-align: left;
+    }
+
+    .kb-popup-left-panel .search-faq-title {
+      font-family: var(--font-body);
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--color-text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .kb-popup-left-panel .search-faq-path {
+      font-family: var(--font-body);
+      font-size: 11px;
+      color: var(--color-text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .kb-popup-left-panel .empty-search-state {
+      padding: 30px 10px;
+      text-align: center;
+      color: var(--color-text-muted);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .kb-popup-left-panel .empty-search-state .material-icons {
+      font-size: 28px;
+      opacity: 0.5;
+    }
+
+    .kb-popup-left-panel .empty-search-state p {
+      font-size: 12px;
+      margin: 0;
+    }
   `]
 })
 
@@ -3285,8 +3934,139 @@ export class TicketsTabComponent implements OnInit {
   private pollingSub?: Subscription;
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private initialViewDecided = false;
+
+  @ViewChild('commentsList') commentsList?: ElementRef<HTMLDivElement>;
+
+  scrollToBottom(): void {
+    setTimeout(() => {
+      if (this.commentsList) {
+        try {
+          const element = this.commentsList.nativeElement;
+          element.scrollTop = element.scrollHeight;
+        } catch (err) {
+          console.error('Error scrolling to bottom:', err);
+        }
+      }
+    }, 100);
+  }
 
   previousListMode = signal<'list' | 'archived'>('list');
+  isChatOpen = computed(() => this.ticketService.isChatOpen());
+
+  // KB shortcut popup state & methods
+  showKbPopup = signal<boolean>(false);
+  kbFaqs = signal<Faq[]>([]);
+  kbSearchQuery = signal<string>('');
+  kbSelectedFaq = signal<Faq | null>(null);
+
+  kbCategoryTree = computed<any[]>(() => {
+    return this.buildKbCategoryTree(this.kbFaqs());
+  });
+
+  kbFilteredFaqs = computed<Faq[]>(() => {
+    const query = this.kbSearchQuery().toLowerCase().trim();
+    const all = this.kbFaqs();
+    if (!query) return [];
+
+    return all.filter(faq => {
+      const matchQuestion = faq.questions.toLowerCase().includes(query);
+      const matchAnswer = faq.answers.toLowerCase().includes(query);
+      const matchLabel = faq.label.toLowerCase().includes(query);
+      const matchTags = faq.tags && faq.tags.some(tag => tag.toLowerCase().includes(query));
+      return matchQuestion || matchAnswer || matchLabel || matchTags;
+    });
+  });
+
+  openKbPopup(): void {
+    const token = sessionStorage.getItem('hsi_token');
+    const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
+
+    this.http.get<Faq[]>('/api/faqs', { headers }).subscribe({
+      next: (data) => {
+        this.kbFaqs.set(data);
+        this.kbSearchQuery.set('');
+        this.kbSelectedFaq.set(null);
+        this.showKbPopup.set(true);
+      },
+      error: (err) => {
+        console.error('Error loading FAQs for ticket reply shortcut:', err);
+      }
+    });
+  }
+
+  closeKbPopup(): void {
+    this.showKbPopup.set(false);
+    this.kbSelectedFaq.set(null);
+    this.kbSearchQuery.set('');
+  }
+
+  selectKbFaq(faq: Faq): void {
+    this.kbSelectedFaq.set(faq);
+  }
+
+  insertKbAnswer(faq: Faq): void {
+    const textToInsert = faq.questions + '\n' + faq.answers;
+    if (this.newCommentText.trim()) {
+      this.newCommentText += '\n\n' + textToInsert;
+    } else {
+      this.newCommentText = textToInsert;
+    }
+    this.closeKbPopup();
+  }
+
+  toggleKbNode(node: any): void {
+    node.isExpanded = !node.isExpanded;
+  }
+
+  private buildKbCategoryTree(faqs: Faq[]): any[] {
+    const root: any[] = [];
+
+    faqs.forEach(faq => {
+      const parts = faq.label.split('/').map(s => s.trim()).filter(Boolean);
+      if (parts.length === 0) return;
+
+      let currentLevel = root;
+      let pathAccumulator = '';
+
+      parts.forEach((part, index) => {
+        pathAccumulator = pathAccumulator ? `${pathAccumulator} / ${part}` : part;
+        const isLast = index === parts.length - 1;
+
+        let node = currentLevel.find(n => n.name === part);
+        if (!node) {
+          node = {
+            name: part,
+            fullName: pathAccumulator,
+            subcategories: [],
+            faqs: [],
+            isExpanded: false,
+            totalCount: 0
+          };
+          currentLevel.push(node);
+        }
+
+        if (isLast) {
+          node.faqs.push(faq);
+        }
+
+        currentLevel = node.subcategories;
+      });
+    });
+
+    const calculateCounts = (nodes: any[]): number => {
+      let count = 0;
+      nodes.forEach(node => {
+        const subCount = calculateCounts(node.subcategories);
+        node.totalCount = node.faqs.length + subCount;
+        count += node.totalCount;
+      });
+      return count;
+    };
+
+    calculateCounts(root);
+    return root;
+  }
   archivedTicketIds = signal<string[]>([]);
   showResolveConfirmModal = signal(false);
   ticketToResolveId = signal('');
@@ -3858,6 +4638,13 @@ export class TicketsTabComponent implements OnInit {
   constructor() {
     this.initForm();
 
+    // Effect to scroll comments list to bottom when selected ticket or comments change
+    effect(() => {
+      this.selectedTicket();
+      this.ticketComments();
+      this.scrollToBottom();
+    });
+
     // Load last seen times and archived tickets when user changes
     effect(() => {
       const user = this.authService.currentUser();
@@ -3970,15 +4757,7 @@ export class TicketsTabComponent implements OnInit {
     //   clearInterval(intervalId);
     // });
 
-    // Seed initial user email if logged in
-    effect(() => {
-      const user = this.authService.currentUser();
-      if (user) {
-        this.ticketForm.patchValue({
-          email: user.username.includes('@') ? user.username : `${user.username}@salud.larioja.gob.ar`
-        });
-      }
-    });
+
 
     // Fetch agents list for all users to resolve agent names
     effect(() => {
@@ -3990,6 +4769,26 @@ export class TicketsTabComponent implements OnInit {
         });
       }
     });
+
+    // Reactive initial view selection based on ticket loading
+    effect(() => {
+      const user = this.authService.currentUser();
+      const loaded = this.ticketService.ticketsLoaded();
+      const urlView = this.route.snapshot.queryParams['view'];
+
+      if (user && loaded && !urlView && !this.initialViewDecided) {
+        this.initialViewDecided = true;
+        if (user.role !== 'user') {
+          this.setViewMode('list');
+        } else {
+          if (this.ticketService.tickets().length > 0) {
+            this.setViewMode('list');
+          } else {
+            this.setViewMode('create');
+          }
+        }
+      }
+    }, { allowSignalWrites: true });
   }
 
   ngOnInit() {
@@ -4012,21 +4811,6 @@ export class TicketsTabComponent implements OnInit {
     if (user) {
       // Disparamos la carga de tickets
       this.ticketService.loadTicketsForUser(user.username);
-
-      const urlView = this.route.snapshot.queryParams['view'];
-      if (!urlView) {
-        if (user.role !== 'user') {
-          this.innerViewMode.set('list');
-        } else {
-          // Los Usuarios normales arrancan en "crear". 
-          // Salvo que ya tengan tickets cacheados en el servicio, en cuyo caso ven la lista.
-          if (this.ticketService.tickets().length > 0) {
-            this.innerViewMode.set('list');
-          } else {
-            this.innerViewMode.set('create');
-          }
-        }
-      }
     }
 
     // 🕒 INICIO DEL POLLING SILENCIOSO (Cada 3 segundos)
@@ -4273,12 +5057,6 @@ export class TicketsTabComponent implements OnInit {
 
   private resetForm(): void {
     this.ticketForm.reset();
-    const user = this.authService.currentUser();
-    if (user) {
-      this.ticketForm.patchValue({
-        email: user.username.includes('@') ? user.username : `${user.username}@salud.larioja.gob.ar`
-      });
-    }
     this.institutionQuery.set('');
   }
 

@@ -706,6 +706,10 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
     effect(() => {
       sessionStorage.setItem('hsi_chat_open', String(this.isOpen()));
     });
+
+    effect(() => {
+      this.ticketService.isChatOpen.set(this.isOpen());
+    });
   }
 
   ngOnInit(): void {

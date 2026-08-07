@@ -102,12 +102,6 @@ interface CategoryNode {
               <div class="article-header">
                 <h3>{{ faq.questions }}</h3>
                 <div class="article-actions">
-                  <!-- Views Count (Mock) -->
-                  <div class="views-counter">
-                    <span class="material-icons eye-icon">visibility</span>
-                    <span>{{ getMockViews(faq.id) }}</span>
-                  </div>
-                  
                   <!-- Edit Button -->
                   <button class="edit-article-btn" (click)="openEditArticleModal(faq)">
                     <span class="material-icons">edit</span>

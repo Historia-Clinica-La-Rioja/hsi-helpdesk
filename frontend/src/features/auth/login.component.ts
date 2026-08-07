@@ -26,17 +26,13 @@ import { HsiHalftoneComponent } from '../../shared/components/hsi-halftone/hsi-h
           <img class="hsi-logo hsi-logo--min" src="assets/logos/ministerio.svg"
             alt="Ministerio de Salud" />
         </div>
-        <div class="hsi-header-tag">
-          <span class="material-icons hsi-i" aria-hidden="true">headset</span>
-          <span>Centro de soporte</span>
-        </div>
       </header>
 
       <!-- Contenido: todo centrado en una columna -->
       <main class="hsi-main">
         <hsi-robot-logo size="clamp(160px, 25vh, 250px)"></hsi-robot-logo>
 
-        <h1 class="hsi-title">Sistema de Soporte de HSI</h1>
+        <h1 class="hsi-title">Sistema de Soporte</h1>
 
 
         <section class="hsi-card">
@@ -281,7 +277,8 @@ import { HsiHalftoneComponent } from '../../shared/components/hsi-halftone/hsi-h
       margin: 6px 0 4px;
       font-size: clamp(22px, 3vw, 28px);
       font-weight: 400;
-      color: #3a4e5c;
+      color: #688193;
+      line-height: 1.0;
     }
 
     .hsi-subtitle {
@@ -458,11 +455,11 @@ export class LoginComponent {
   private router = inject(Router);
 
   loginMode = signal<'user' | 'admin'>('user');
-  
+
   // HSI User fields
   hsiEmail = '';
   hsiDni = '';
-  
+
   // Admin credentials
   adminUsername = '';
   adminPassword = '';

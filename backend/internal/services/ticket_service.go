@@ -4,8 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 	"sync"
+	"time"
+
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/models"
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/repositories"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -272,7 +273,7 @@ func (s *ticketService) GetTickets(userObjectID primitive.ObjectID, role string)
 	apiTickets := make([]models.APITicket, 0, len(dbTickets))
 	for _, dbT := range dbTickets {
 		apiT := s.populateAPITicket(&dbT, tagMap, userCache, instCache)
-		
+
 		// Fetch messages/comments for this ticket
 		dbMsgs, err := s.ticketRepo.GetMessagesByTicketID(dbT.ID)
 		if err == nil && len(dbMsgs) > 0 {
@@ -320,7 +321,7 @@ func (s *ticketService) GetTicket(ticketID primitive.ObjectID) (*models.APITicke
 	tagMap := s.getTagMap()
 	userCache := make(map[primitive.ObjectID]string)
 	instCache := make(map[primitive.ObjectID]string)
-	
+
 	apiT := s.populateAPITicket(dbT, tagMap, userCache, instCache)
 
 	// Fetch messages/comments
@@ -770,19 +771,19 @@ func (s *ticketService) getTagMap() map[primitive.ObjectID]string {
 // OPTIMIZACIÓN: Se añaden diccionarios (caché) como parámetros para no castigar a MongoDB
 func (s *ticketService) populateAPITicket(dbT *models.DBTicket, tagMap map[primitive.ObjectID]string, userCache map[primitive.ObjectID]string, instCache map[primitive.ObjectID]string) *models.APITicket {
 	apiT := &models.APITicket{
-		ID:          dbT.ID.Hex(),
-		Title:       dbT.Title,
-		Description: dbT.Body,
-		UserID:      "Usuario General",
-		Institution: dbT.Institution.Hex(),
-		Priority:    "Media",
-		Status:      "abierto",
-		Tags:        []string{},
-		Attachments: dbT.Attachments,
-		CreatedAt:   dbT.CreatedAt,
-		UpdatedAt:   dbT.UpdatedAt,
-		EditCount:   dbT.EditCount,
-		ClosedAt:    dbT.ClosedAt,
+		ID:             dbT.ID.Hex(),
+		Title:          dbT.Title,
+		Description:    dbT.Body,
+		UserID:         "Usuario General",
+		Institution:    dbT.Institution.Hex(),
+		Priority:       "Media",
+		Status:         "abierto",
+		Tags:           []string{},
+		Attachments:    dbT.Attachments,
+		CreatedAt:      dbT.CreatedAt,
+		UpdatedAt:      dbT.UpdatedAt,
+		EditCount:      dbT.EditCount,
+		ClosedAt:       dbT.ClosedAt,
 		ResolvedAt:     dbT.ResolvedAt,
 		ReopenedAt:     dbT.ReopenedAt,
 		TransferReason: dbT.TransferReason,
