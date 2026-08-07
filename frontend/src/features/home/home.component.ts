@@ -7,6 +7,7 @@ import { TicketsTabComponent } from './components/tickets-tab/tickets-tab.compon
 import { TrainingComponent } from './components/training/training.component';
 import { ChatbotWidgetComponent } from '../chatbot/chatbot-widget.component';
 import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } from '@angular/router'; // 👈 IMPORTANTE
+import { HsiRobotLogoComponent } from '../../shared/components/hsi-robot-logo/hsi-robot-logo.component';
 
 @Component({
   selector: 'app-home',
@@ -17,6 +18,7 @@ import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } fro
     TicketsTabComponent,
     TrainingComponent,
     ChatbotWidgetComponent,
+    HsiRobotLogoComponent,
     RouterOutlet,
     RouterLink,
     RouterLinkActive
@@ -177,8 +179,8 @@ import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } fro
             <div class="chatbot-highlight-box">
               <div class="box-header">
                 <h4>Asistente Virtual 24/7</h4>
-                <div class="mini-bot-icon">
-                  <span class="bot-face"></span>
+                <div class="mini-bot-icon" style="background: none; width: auto; height: auto;">
+                  <hsi-robot-logo size="32px" [followMouse]="false"></hsi-robot-logo>
                 </div>
               </div>
               <p class="box-description">
@@ -797,7 +799,7 @@ export class HomeComponent {
         if (typeof localStorage !== 'undefined') {
           const aboutShownKey = `hsi_about_shown_${user.id}`;
           const hasShown = localStorage.getItem(aboutShownKey);
-          if (!hasShown) {
+          if (!hasShown && user.role?.toLowerCase() === 'user') {
             this.showAboutModal.set(true);
           }
         }

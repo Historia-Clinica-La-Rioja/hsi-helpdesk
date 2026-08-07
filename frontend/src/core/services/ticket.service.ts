@@ -44,6 +44,7 @@ export class TicketService {
 
   toastMessage = signal<string | null>(null);
   toastTicketId = signal<string | null>(null);
+  ticketsLoaded = signal(false);
 
   tickets = computed(() => this.allTickets());
   hasTickets = computed(() => this.allTickets().length > 0);
@@ -62,6 +63,7 @@ export class TicketService {
     const token = this.auth.token();
     if (!token) {
       this.allTickets.set([]);
+      this.ticketsLoaded.set(false);
       return;
     }
 
@@ -84,16 +86,19 @@ export class TicketService {
           })) : []
         }));
         this.allTickets.set(parsed);
+        this.ticketsLoaded.set(true);
       },
       error: (err) => {
         console.error('Error loading tickets from backend:', err);
         this.allTickets.set([]);
+        this.ticketsLoaded.set(true);
       }
     });
   }
 
   clearTickets(): void {
     this.allTickets.set([]);
+    this.ticketsLoaded.set(false);
   }
 
   getTicketDetails(id: string): Observable<Ticket> {

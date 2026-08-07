@@ -3285,6 +3285,7 @@ export class TicketsTabComponent implements OnInit {
   private pollingSub?: Subscription;
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private initialViewDecided = false;
 
   previousListMode = signal<'list' | 'archived'>('list');
   archivedTicketIds = signal<string[]>([]);
@@ -3990,6 +3991,26 @@ export class TicketsTabComponent implements OnInit {
         });
       }
     });
+
+    // Reactive initial view selection based on ticket loading
+    effect(() => {
+      const user = this.authService.currentUser();
+      const loaded = this.ticketService.ticketsLoaded();
+      const urlView = this.route.snapshot.queryParams['view'];
+
+      if (user && loaded && !urlView && !this.initialViewDecided) {
+        this.initialViewDecided = true;
+        if (user.role !== 'user') {
+          this.setViewMode('list');
+        } else {
+          if (this.ticketService.tickets().length > 0) {
+            this.setViewMode('list');
+          } else {
+            this.setViewMode('create');
+          }
+        }
+      }
+    }, { allowSignalWrites: true });
   }
 
   ngOnInit() {
@@ -4012,21 +4033,6 @@ export class TicketsTabComponent implements OnInit {
     if (user) {
       // Disparamos la carga de tickets
       this.ticketService.loadTicketsForUser(user.username);
-
-      const urlView = this.route.snapshot.queryParams['view'];
-      if (!urlView) {
-        if (user.role !== 'user') {
-          this.innerViewMode.set('list');
-        } else {
-          // Los Usuarios normales arrancan en "crear". 
-          // Salvo que ya tengan tickets cacheados en el servicio, en cuyo caso ven la lista.
-          if (this.ticketService.tickets().length > 0) {
-            this.innerViewMode.set('list');
-          } else {
-            this.innerViewMode.set('create');
-          }
-        }
-      }
     }
 
     // 🕒 INICIO DEL POLLING SILENCIOSO (Cada 3 segundos)

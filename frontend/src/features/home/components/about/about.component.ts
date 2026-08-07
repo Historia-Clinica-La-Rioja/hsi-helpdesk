@@ -1,10 +1,11 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { HsiRobotLogoComponent } from '../../../../shared/components/hsi-robot-logo/hsi-robot-logo.component';
 
 @Component({
   selector: 'app-about',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, HsiRobotLogoComponent],
   template: `
     <div class="about-card-content">
       <h2>¿Qué es el Sistema de Soporte de HSI?</h2>
@@ -17,8 +18,8 @@ import { CommonModule } from '@angular/common';
       <div class="chatbot-highlight-box">
         <div class="box-header">
           <h3>Asistente Virtual 24/7</h3>
-          <div class="mini-bot-icon">
-            <span class="bot-face"></span>
+          <div class="mini-bot-icon" style="background: none; width: auto; height: auto;">
+            <hsi-robot-logo size="32px" [followMouse]="false"></hsi-robot-logo>
           </div>
         </div>
         <p class="box-description">
