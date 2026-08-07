@@ -55,16 +55,7 @@ import { HsiRobotLogoComponent } from '../../shared/components/hsi-robot-logo/hs
             >
               <span class="material-icons">add_box</span>
             </div>
-
-            <!-- Tickets archivados (User) -->
-            <div 
-              class="sidebar-item" 
-              [class.active]="isRouteActive('archived')"
-              (click)="onArchivedTicketsClick()"
-              title="Tickets archivados"
-            >
-              <span class="material-icons">archive</span>
-            </div>
+            
 
             <!-- Capacitación (User) -->
             <div 
@@ -74,6 +65,16 @@ import { HsiRobotLogoComponent } from '../../shared/components/hsi-robot-logo/hs
               title="Capacitación"
             >
               <span class="material-icons">school</span>
+            </div>
+
+            <!-- Tickets archivados (User) -->
+            <div 
+              class="sidebar-item" 
+              [class.active]="isRouteActive('archived')"
+              (click)="onArchivedTicketsClick()"
+              title="Tickets archivados"
+            >
+              <span class="material-icons">archive</span>
             </div>
           } @else {
             <!-- Tickets List (Agent) -->
@@ -89,16 +90,6 @@ import { HsiRobotLogoComponent } from '../../shared/components/hsi-robot-logo/hs
               }
             </div>
 
-            <!-- Tickets archivados (Agent) -->
-            <div 
-              class="sidebar-item" 
-              [class.active]="isRouteActive('archived')"
-              (click)="onArchivedTicketsClick()"
-              title="Tickets archivados"
-            >
-              <span class="material-icons">archive</span>
-            </div>
-
             <!-- Base de Conocimiento (Agent) -->
             <div 
               class="sidebar-item" 
@@ -107,6 +98,15 @@ import { HsiRobotLogoComponent } from '../../shared/components/hsi-robot-logo/hs
               title="Base de Conocimiento"
             >
               <span class="material-icons">menu_book</span>
+            </div>
+            <!-- Tickets archivados (Agent) -->
+            <div 
+              class="sidebar-item" 
+              [class.active]="isRouteActive('archived')"
+              (click)="onArchivedTicketsClick()"
+              title="Tickets archivados"
+            >
+              <span class="material-icons">archive</span>
             </div>
           }
         </div>
