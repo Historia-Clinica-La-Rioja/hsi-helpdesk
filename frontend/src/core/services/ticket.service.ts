@@ -44,6 +44,7 @@ export class TicketService {
 
   toastMessage = signal<string | null>(null);
   toastTicketId = signal<string | null>(null);
+  isChatOpen = signal<boolean>(false);
   ticketsLoaded = signal(false);
 
   tickets = computed(() => this.allTickets());

@@ -1226,7 +1226,7 @@ export interface Priority {
 
       <!-- Floating Toast Notification -->
       @if (toastMessage(); as message) {
-        <div class="toast-notification" (click)="goToTicketFromToast()">
+        <div class="toast-notification" [class.chatbot-open]="isChatOpen()" (click)="goToTicketFromToast()">
           <span class="material-icons toast-icon">notifications_active</span>
           <div class="toast-content">
             <span class="toast-title">Nueva respuesta</span>
@@ -3240,6 +3240,10 @@ export interface Priority {
       transition: all 0.2s ease;
     }
 
+    .toast-notification.chatbot-open {
+      bottom: 600px;
+    }
+
     .toast-notification:hover {
       transform: translateY(-2px);
       box-shadow: 0 20px 40px rgba(51, 49, 67, 0.25);
@@ -3948,6 +3952,7 @@ export class TicketsTabComponent implements OnInit {
   }
 
   previousListMode = signal<'list' | 'archived'>('list');
+  isChatOpen = computed(() => this.ticketService.isChatOpen());
 
   // KB shortcut popup state & methods
   showKbPopup = signal<boolean>(false);
@@ -4752,15 +4757,7 @@ export class TicketsTabComponent implements OnInit {
     //   clearInterval(intervalId);
     // });
 
-    // Seed initial user email if logged in
-    effect(() => {
-      const user = this.authService.currentUser();
-      if (user) {
-        this.ticketForm.patchValue({
-          email: user.username.includes('@') ? user.username : `${user.username}@salud.larioja.gob.ar`
-        });
-      }
-    });
+
 
     // Fetch agents list for all users to resolve agent names
     effect(() => {
@@ -5060,12 +5057,6 @@ export class TicketsTabComponent implements OnInit {
 
   private resetForm(): void {
     this.ticketForm.reset();
-    const user = this.authService.currentUser();
-    if (user) {
-      this.ticketForm.patchValue({
-        email: user.username.includes('@') ? user.username : `${user.username}@salud.larioja.gob.ar`
-      });
-    }
     this.institutionQuery.set('');
   }
 
