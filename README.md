@@ -30,46 +30,6 @@ El sistema ofrece tres vistas diferenciadas según el rol:
 
 ---
 
-## Estructura del repositorio
-
-```
-hsi-support-tickets/
-├── backend/                  # API REST en Go
-│   ├── cmd/server/           # Punto de entrada (main.go)
-│   ├── internal/
-│   │   ├── handlers/         # Controladores HTTP
-│   │   ├── services/         # Lógica de negocio
-│   │   ├── repositories/     # Acceso a MongoDB
-│   │   ├── models/           # Structs de dominio
-│   │   └── middleware/       # JWT, roles, CORS, logger
-│   ├── domain/
-│   │   ├── chatbot/          # Matching de FAQ, escalamiento, sesiones
-│   │   ├── tickets/          # Estados y transiciones de tickets
-│   │   └── roles/            # Definición de permisos por rol
-│   ├── config/               # Variables de entorno, conexión MongoDB
-│   ├── pkg/                  # Utilidades reutilizables (jwt, response, etc.)
-│   ├── websocket/            # Hub y clientes para notificaciones en tiempo real
-│   ├── seeder/               # Datos iniciales (FAQs, roles)
-│   ├── .env.example
-│   ├── go.mod
-│   └── Dockerfile
-│
-├── frontend/                 # Aplicación Angular
-│   └── src/app/
-│       ├── core/             # Guards, interceptors, servicios globales
-│       ├── shared/           # Componentes y pipes reutilizables
-│       └── features/
-│           ├── chatbot/      # Vista pública 24h
-│           ├── agent/        # Dashboard del agente
-│           ├── owner/        # Panel de supervisión
-│           ├── forms/        # Formularios de autogestión
-│           └── auth/         # Login (agente y owner)
-│
-├── docker-compose.yml
-└── README.md
-```
-
----
 
 ## Requisitos previos
 
