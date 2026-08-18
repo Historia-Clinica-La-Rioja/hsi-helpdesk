@@ -37,7 +37,12 @@ export interface Priority {
   ],
   template: `
     <div class="tickets-container">
-      @if (innerViewMode() === 'create') {
+      @if (showInitialLoading()) {
+        <div class="lazy-placeholder">
+          <span class="material-icons loading-spin">sync</span>
+          <p>Cargando información...</p>
+        </div>
+      } @else if (innerViewMode() === 'create') {
         <!-- Create Form View -->
         <div class="ticket-form-card">
           <h2>Nuevo Ticket de Soporte</h2>
@@ -1240,6 +1245,31 @@ export interface Priority {
     </div>
   `,
   styles: [`
+    .lazy-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 400px;
+      color: var(--color-text-muted);
+      gap: 16px;
+    }
+
+    .loading-spin {
+      font-size: 32px;
+      animation: spin 1.2s linear infinite;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .lazy-placeholder p {
+      font-family: var(--font-body);
+      font-size: 14px;
+    }
+
     .tickets-container {
       width: 100%;
       height: 100%;
@@ -3934,7 +3964,7 @@ export class TicketsTabComponent implements OnInit {
   private pollingSub?: Subscription;
   private route = inject(ActivatedRoute);
   private router = inject(Router);
-  private initialViewDecided = false;
+  private initialViewDecided = signal(false);
 
   @ViewChild('commentsList') commentsList?: ElementRef<HTMLDivElement>;
 
@@ -4254,6 +4284,11 @@ export class TicketsTabComponent implements OnInit {
   @Output() ticketSelected = new EventEmitter<Ticket>();
 
   innerViewMode = signal<'create' | 'list' | 'detail' | 'archived'>('create');
+  showInitialLoading = computed(() => {
+    const user = this.authService.currentUser();
+    const urlView = this.route.snapshot.queryParams['view'];
+    return !!user && !urlView && !this.ticketService.ticketsLoaded() && !this.initialViewDecided();
+  });
 
   selectedTicket = signal<Ticket | null>(null);
   currentUserRole = computed(() => this.authService.currentUser()?.role || '');
@@ -4638,6 +4673,16 @@ export class TicketsTabComponent implements OnInit {
   constructor() {
     this.initForm();
 
+    // Set initial view for agents immediately to avoid flash of user-only create form
+    const user = this.authService.currentUser();
+    const urlView = this.route.snapshot.queryParams['view'];
+    if (user && !urlView) {
+      if (user.role !== 'user') {
+        this.innerViewMode.set('list');
+        this.initialViewDecided.set(true);
+      }
+    }
+
     // Effect to scroll comments list to bottom when selected ticket or comments change
     effect(() => {
       this.selectedTicket();
@@ -4652,21 +4697,31 @@ export class TicketsTabComponent implements OnInit {
         this.initLastSeenTimes(user.id);
         this.initReadTickets(user.id);
 
-        // Load user-scoped archived tickets
+        // Load user-scoped archived tickets (by username for database restart persistence)
         try {
-          const savedArchived = localStorage.getItem(`hsi_archived_tickets_${user.id}`);
+          const usernameKey = `hsi_archived_tickets_${user.username}`;
+          const savedArchived = localStorage.getItem(usernameKey);
           if (savedArchived) {
             this.archivedTicketIds.set(JSON.parse(savedArchived));
           } else {
-            // Check for legacy shared archived tickets to migrate/use
-            const legacyArchived = localStorage.getItem('hsi_archived_tickets');
-            if (legacyArchived) {
-              const legacyIds = JSON.parse(legacyArchived);
-              this.archivedTicketIds.set(legacyIds);
-              // Migrate it to scoped
-              localStorage.setItem(`hsi_archived_tickets_${user.id}`, legacyArchived);
+            // Check for user ID-scoped archived tickets (previous version) to migrate
+            const userIdKey = `hsi_archived_tickets_${user.id}`;
+            const userIdArchived = localStorage.getItem(userIdKey);
+            if (userIdArchived) {
+              const ids = JSON.parse(userIdArchived);
+              this.archivedTicketIds.set(ids);
+              localStorage.setItem(usernameKey, userIdArchived);
             } else {
-              this.archivedTicketIds.set([]);
+              // Check for legacy shared archived tickets to migrate/use
+              const legacyArchived = localStorage.getItem('hsi_archived_tickets');
+              if (legacyArchived) {
+                const legacyIds = JSON.parse(legacyArchived);
+                this.archivedTicketIds.set(legacyIds);
+                // Migrate it to scoped
+                localStorage.setItem(usernameKey, legacyArchived);
+              } else {
+                this.archivedTicketIds.set([]);
+              }
             }
           }
         } catch (e) {
@@ -4776,8 +4831,8 @@ export class TicketsTabComponent implements OnInit {
       const loaded = this.ticketService.ticketsLoaded();
       const urlView = this.route.snapshot.queryParams['view'];
 
-      if (user && loaded && !urlView && !this.initialViewDecided) {
-        this.initialViewDecided = true;
+      if (user && loaded && !urlView && !this.initialViewDecided()) {
+        this.initialViewDecided.set(true);
         if (user.role !== 'user') {
           this.setViewMode('list');
         } else {
@@ -4960,14 +5015,14 @@ export class TicketsTabComponent implements OnInit {
   }
 
   archiveTicket(ticketId: string): void {
-    const userId = this.currentUserId();
-    if (!userId) return;
+    const user = this.authService.currentUser();
+    if (!user || !user.username) return;
     const current = this.archivedTicketIds();
     if (!current.includes(ticketId)) {
       const updated = [...current, ticketId];
       this.archivedTicketIds.set(updated);
       try {
-        localStorage.setItem(`hsi_archived_tickets_${userId}`, JSON.stringify(updated));
+        localStorage.setItem(`hsi_archived_tickets_${user.username}`, JSON.stringify(updated));
       } catch (e) {
         console.error('Error saving archived tickets:', e);
       }
@@ -4975,13 +5030,13 @@ export class TicketsTabComponent implements OnInit {
   }
 
   unarchiveTicket(ticketId: string): void {
-    const userId = this.currentUserId();
-    if (!userId) return;
+    const user = this.authService.currentUser();
+    if (!user || !user.username) return;
     const current = this.archivedTicketIds();
     const updated = current.filter(id => id !== ticketId);
     this.archivedTicketIds.set(updated);
     try {
-      localStorage.setItem(`hsi_archived_tickets_${userId}`, JSON.stringify(updated));
+      localStorage.setItem(`hsi_archived_tickets_${user.username}`, JSON.stringify(updated));
     } catch (e) {
       console.error('Error saving archived tickets:', e);
     }

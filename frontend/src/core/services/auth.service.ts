@@ -23,7 +23,11 @@ export class AuthService {
     try {
       const parts = token.split('.');
       if (parts.length !== 3) return null;
-      const decoded = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'));
+      let payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      while (payload.length % 4) {
+        payload += '=';
+      }
+      const decoded = atob(payload);
       return JSON.parse(decoded);
     } catch (e) {
       return null;
