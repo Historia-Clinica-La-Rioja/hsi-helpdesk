@@ -62,6 +62,36 @@ export class AuthService {
     return !!currentToken && currentToken !== 'null' && currentToken !== 'undefined';
   }
 
+  loginSSO(hsiToken: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/auth/login/sso`, { token: hsiToken }).pipe(
+      tap(res => {
+        if (res && res.status === 'success' && res.data && res.data.token) {
+          const userToken = res.data.token;
+          const decoded = this.decodeToken(userToken);
+          
+          const userId = decoded ? decoded.user_id : '';
+          const userRole = decoded ? decoded.role : 'user';
+          
+          const userProfile = {
+            id: userId,
+            username: 'usuario_sso',
+            firstName: 'Usuario HSI',
+            role: userRole
+          };
+
+          sessionStorage.setItem('hsi_token', userToken);
+          sessionStorage.setItem('hsi_user', JSON.stringify(userProfile));
+
+          this.token.set(userToken);
+          this.currentUser.set(userProfile);
+        }
+      }),
+      catchError(err => {
+        return throwError(() => new Error(err.error?.message || 'Error validando el token de HSI.'));
+      })
+    );
+  }
+
   loginHSI(username: string, dni: string): Observable<any> {
     const trimmedUser = username.trim();
     const trimmedDni = dni.trim();
