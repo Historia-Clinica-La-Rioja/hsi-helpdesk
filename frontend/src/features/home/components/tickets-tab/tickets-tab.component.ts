@@ -724,10 +724,12 @@ export interface Priority {
                             <button 
                               type="button" 
                               class="resolve-action-btn"
+                              [disabled]="!hasAgentCommented(ticket) || ticket.close_requested"
                               (click)="openResolveConfirmation(ticket.id)"
+                              [title]="!hasAgentCommented(ticket) ? 'Debes responder al ticket al menos una vez antes de poder proponer su resolución' : (ticket.close_requested ? 'Ya has solicitado el cierre del ticket' : 'Resolver Ticket')"
                             >
                               <span class="material-icons" style="font-size: 16px; vertical-align: middle;">task_alt</span>
-                              Resolver Ticket
+                              {{ ticket.close_requested ? 'Esperando Usuario' : 'Resolver Ticket' }}
                             </button>
                           } @else {
                             <div class="ticket-resolved-badge-large">
@@ -833,6 +835,24 @@ export interface Priority {
                 </div>
 
                 <!-- Add comment Form -->
+                @if (currentUserRole() === 'user' && ticket.close_requested) {
+                  <div class="close-requested-banner">
+                    <span class="material-icons info-icon">info</span>
+                    <div class="banner-content">
+                      <p class="banner-title">El agente de soporte desea resolver este ticket</p>
+                      <p class="banner-text">¿Estás de acuerdo o tu consulta fue solucionada?</p>
+                    </div>
+                    <div class="banner-actions">
+                      <button type="button" class="reject-btn" (click)="onRejectClose(ticket.id)">
+                        No, mantener abierto
+                      </button>
+                      <button type="button" class="confirm-btn" (click)="onConfirmClose(ticket.id)">
+                        Sí, cerrar ticket
+                      </button>
+                    </div>
+                  </div>
+                }
+
                 @if (currentUserRole() === 'user' || !ticket.assigned_to || ticket.assigned_to === currentUserId()) {
                   <form class="add-comment-form" (submit)="onSubmitComment($event)">
                     <textarea 
@@ -1245,6 +1265,79 @@ export interface Priority {
     </div>
   `,
   styles: [`
+    .close-requested-banner {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 20px;
+      background: #E8F5E9;
+      border: 1px solid #C8E6C9;
+      border-radius: 12px;
+      margin: 15px 0;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+    }
+
+    .close-requested-banner .info-icon {
+      color: #2E7D32;
+      font-size: 24px;
+    }
+
+    .close-requested-banner .banner-content {
+      flex: 1;
+    }
+
+    .close-requested-banner .banner-title {
+      font-family: var(--font-heading);
+      font-weight: 600;
+      color: #1B5E20;
+      margin: 0 0 4px 0;
+      font-size: 14px;
+    }
+
+    .close-requested-banner .banner-text {
+      font-family: var(--font-body);
+      color: #388E3C;
+      margin: 0;
+      font-size: 13px;
+    }
+
+    .close-requested-banner .banner-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .close-requested-banner button {
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: var(--font-body);
+      transition: all 0.2s ease;
+    }
+
+    .close-requested-banner .reject-btn {
+      background: transparent;
+      border: 1px solid #81C784;
+      color: #2E7D32;
+    }
+
+    .close-requested-banner .reject-btn:hover {
+      background: rgba(46, 125, 50, 0.05);
+      border-color: #2E7D32;
+    }
+
+    .close-requested-banner .confirm-btn {
+      background: #2E7D32;
+      border: 1px solid #2E7D32;
+      color: #ffffff;
+    }
+
+    .close-requested-banner .confirm-btn:hover {
+      background: #1B5E20;
+      border-color: #1B5E20;
+    }
+
     .lazy-placeholder {
       display: flex;
       flex-direction: column;
@@ -5570,6 +5663,57 @@ export class TicketsTabComponent implements OnInit {
       this.changeStatusQuick(id, 'resuelto');
     }
     this.closeResolveConfirmation();
+  }
+
+  hasAgentCommented(ticket: Ticket): boolean {
+    if (!ticket || !ticket.messages) return false;
+    return ticket.messages.some(m => m.role === 'agent' || m.role === 'admin' || m.role === 'owner');
+  }
+
+  onConfirmClose(ticketId: string): void {
+    this.ticketService.confirmClose(ticketId).subscribe({
+      next: (updatedTicket) => {
+        const parsed = {
+          ...updatedTicket,
+          created_at: new Date(updatedTicket.created_at),
+          updated_at: new Date(updatedTicket.updated_at),
+          closed_at: updatedTicket.closed_at ? new Date(updatedTicket.closed_at) : undefined,
+          resolved_at: updatedTicket.resolved_at ? new Date(updatedTicket.resolved_at) : undefined,
+          reopened_at: updatedTicket.reopened_at ? new Date(updatedTicket.reopened_at) : undefined,
+          messages: updatedTicket.messages ? updatedTicket.messages.map((m: any) => ({
+            ...m,
+            created_at: new Date(m.created_at)
+          })) : []
+        };
+        this.selectedTicket.set(parsed);
+      },
+      error: (err) => {
+        console.error('Error confirming ticket resolution:', err);
+      }
+    });
+  }
+
+  onRejectClose(ticketId: string): void {
+    this.ticketService.rejectClose(ticketId).subscribe({
+      next: (updatedTicket) => {
+        const parsed = {
+          ...updatedTicket,
+          created_at: new Date(updatedTicket.created_at),
+          updated_at: new Date(updatedTicket.updated_at),
+          closed_at: updatedTicket.closed_at ? new Date(updatedTicket.closed_at) : undefined,
+          resolved_at: updatedTicket.resolved_at ? new Date(updatedTicket.resolved_at) : undefined,
+          reopened_at: updatedTicket.reopened_at ? new Date(updatedTicket.reopened_at) : undefined,
+          messages: updatedTicket.messages ? updatedTicket.messages.map((m: any) => ({
+            ...m,
+            created_at: new Date(m.created_at)
+          })) : []
+        };
+        this.selectedTicket.set(parsed);
+      },
+      error: (err) => {
+        console.error('Error rejecting ticket resolution:', err);
+      }
+    });
   }
 }
 

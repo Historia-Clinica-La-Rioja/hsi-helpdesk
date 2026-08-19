@@ -94,6 +94,8 @@ func main() {
 				tickets.PUT("/:id/status", ticketHandler.UpdateTicketStatus)
 				tickets.PUT("/:id/assign", ticketHandler.AssignTicket)
 				tickets.POST("/:id/messages", ticketHandler.AddMessage)
+				tickets.POST("/:id/close/confirm", ticketHandler.ConfirmClose)
+				tickets.POST("/:id/close/reject", ticketHandler.RejectClose)
 			}
 
 			priorities := protected.Group("/priorities")

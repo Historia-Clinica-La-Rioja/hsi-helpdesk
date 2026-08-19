@@ -64,6 +64,8 @@ type TicketService interface {
 	AssignTicket(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID, agentObjectID primitive.ObjectID, reason string) (*models.APITicket, error)
 	GetAgents() ([]models.User, error)
 	GetTags() ([]models.Tag, error)
+	ConfirmClose(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID) (*models.APITicket, error)
+	RejectClose(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID) (*models.APITicket, error)
 }
 
 type ticketService struct {
@@ -568,23 +570,7 @@ func (s *ticketService) UpdateTicketStatus(userObjectID primitive.ObjectID, role
 		}
 	}
 
-	stateID, ok := StateNameToID[strings.ToLower(newStatus)]
-	if !ok {
-		return nil, errors.New("estado de ticket inválido")
-	}
-
-	dbT.StateID = stateID
 	dbT.UpdatedAt = time.Now()
-	if strings.ToLower(newStatus) == "resuelto" || strings.ToLower(newStatus) == "cerrado" {
-		now := time.Now()
-		dbT.ResolvedAt = &now
-		dbT.ClosedAt = &now
-	}
-
-	err = s.ticketRepo.Update(dbT)
-	if err != nil {
-		return nil, err
-	}
 
 	user, err := s.ticketRepo.FindUserByID(userObjectID)
 	fullName := "Agente de Soporte"
@@ -595,15 +581,65 @@ func (s *ticketService) UpdateTicketStatus(userObjectID primitive.ObjectID, role
 		}
 	}
 
-	audit := &models.AuditLog{
-		ID:          primitive.NewObjectID(),
-		TicketID:    dbT.ID,
-		UserID:      userObjectID,
-		Type:        "MESSAGE",
-		Description: fmt.Sprintf("Agente %s cambió el estado del ticket a %s", fullName, newStatus),
-		InsertedAt:  time.Now(),
+	if strings.ToLower(newStatus) == "resuelto" || strings.ToLower(newStatus) == "cerrado" {
+		// 1. Verificar que el agente haya comentado al menos una vez
+		dbMsgs, err := s.ticketRepo.GetMessagesByTicketID(ticketID)
+		if err != nil {
+			return nil, fmt.Errorf("error loading messages: %w", err)
+		}
+		hasAgentComment := false
+		for _, msg := range dbMsgs {
+			if msg.Role == "agent" || msg.Role == "admin" || msg.Role == "owner" {
+				hasAgentComment = true
+				break
+			}
+		}
+		if !hasAgentComment {
+			return nil, errors.New("debes responder al ticket al menos una vez antes de poder resolverlo")
+		}
+
+		// 2. Proponer resolución (no cambia el estado a resuelto inmediatamente)
+		dbT.CloseRequested = true
+		dbT.CloseRequestedBy = &userObjectID
+
+		err = s.ticketRepo.Update(dbT)
+		if err != nil {
+			return nil, err
+		}
+
+		audit := &models.AuditLog{
+			ID:          primitive.NewObjectID(),
+			TicketID:    dbT.ID,
+			UserID:      userObjectID,
+			Type:        "MESSAGE",
+			Description: fmt.Sprintf("Agente %s propuso resolver el ticket. Esperando confirmación del usuario.", fullName),
+			InsertedAt:  time.Now(),
+		}
+		go func(a *models.AuditLog) { _ = s.ticketRepo.InsertAuditLog(a) }(audit)
+
+	} else {
+		// Para otros estados (como "en_progreso", "transferido", "reabierto"), actualizamos el StateID directamente
+		stateID, ok := StateNameToID[strings.ToLower(newStatus)]
+		if !ok {
+			return nil, errors.New("estado de ticket inválido")
+		}
+		dbT.StateID = stateID
+
+		err = s.ticketRepo.Update(dbT)
+		if err != nil {
+			return nil, err
+		}
+
+		audit := &models.AuditLog{
+			ID:          primitive.NewObjectID(),
+			TicketID:    dbT.ID,
+			UserID:      userObjectID,
+			Type:        "MESSAGE",
+			Description: fmt.Sprintf("Agente %s cambió el estado del ticket a %s", fullName, newStatus),
+			InsertedAt:  time.Now(),
+		}
+		go func(a *models.AuditLog) { _ = s.ticketRepo.InsertAuditLog(a) }(audit)
 	}
-	go func(a *models.AuditLog) { _ = s.ticketRepo.InsertAuditLog(a) }(audit)
 
 	return s.populateAPITicket(dbT, s.getTagMap(), make(map[primitive.ObjectID]string), make(map[primitive.ObjectID]string)), nil
 }
@@ -787,6 +823,14 @@ func (s *ticketService) populateAPITicket(dbT *models.DBTicket, tagMap map[primi
 		ResolvedAt:     dbT.ResolvedAt,
 		ReopenedAt:     dbT.ReopenedAt,
 		TransferReason: dbT.TransferReason,
+		CloseRequested: dbT.CloseRequested,
+	}
+
+	if dbT.CloseRequestedBy != nil {
+		apiT.CloseRequestedBy = dbT.CloseRequestedBy.Hex()
+	}
+	if dbT.ResolvedBy != nil {
+		apiT.ResolvedBy = dbT.ResolvedBy.Hex()
 	}
 
 	tagsList := make([]string, 0, len(dbT.Tags))
@@ -880,4 +924,127 @@ func resolveSpecialization(spec string, tags []models.DBTag) string {
 		}
 	}
 	return current
+}
+
+func (s *ticketService) ConfirmClose(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID) (*models.APITicket, error) {
+	dbT, err := s.ticketRepo.GetTicketByID(ticketID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Solo el creador del ticket (usuario) o el agente asignado pueden confirmar el cierre
+	if strings.ToLower(role) == "user" && dbT.CreatedBy != userObjectID {
+		return nil, errors.New("no tenés permisos para confirmar el cierre de este ticket")
+	}
+
+	if !dbT.CloseRequested {
+		return nil, errors.New("no se ha solicitado el cierre de este ticket")
+	}
+
+	// Cerrar ticket
+	dbT.StateID = StateNameToID["resuelto"]
+	now := time.Now()
+	dbT.ResolvedAt = &now
+	dbT.ClosedAt = &now
+	dbT.ResolvedBy = dbT.CloseRequestedBy // El agente que propuso la resolución
+	dbT.CloseRequested = false
+	dbT.CloseRequestedBy = nil
+	dbT.UpdatedAt = now
+
+	err = s.ticketRepo.Update(dbT)
+	if err != nil {
+		return nil, err
+	}
+
+	// Nombre del usuario que confirma
+	user, err := s.ticketRepo.FindUserByID(userObjectID)
+	fullName := "Usuario"
+	if err == nil && user != nil {
+		fullName = strings.TrimSpace(fmt.Sprintf("%s %s", user.FirstName, user.LastName))
+		if fullName == "" {
+			fullName = user.Username
+		}
+	}
+
+	audit := &models.AuditLog{
+		ID:          primitive.NewObjectID(),
+		TicketID:    dbT.ID,
+		UserID:      userObjectID,
+		Type:        "MESSAGE",
+		Description: fmt.Sprintf("Usuario %s aceptó resolver el ticket. Ticket Cerrado.", fullName),
+		InsertedAt:  time.Now(),
+	}
+	go func(a *models.AuditLog) { _ = s.ticketRepo.InsertAuditLog(a) }(audit)
+
+	// Mensaje de sistema en el chat
+	systemMsg := &models.DBMessage{
+		ID:          primitive.NewObjectID(),
+		TicketID:    ticketID,
+		SenderID:    "system",
+		Role:        "system",
+		Text:        fmt.Sprintf("El usuario aceptó resolver el ticket. Ticket cerrado exitosamente."),
+		Attachments: []string{},
+		SentAt:      time.Now(),
+	}
+	_ = s.ticketRepo.InsertMessage(systemMsg)
+
+	return s.populateAPITicket(dbT, s.getTagMap(), make(map[primitive.ObjectID]string), make(map[primitive.ObjectID]string)), nil
+}
+
+func (s *ticketService) RejectClose(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID) (*models.APITicket, error) {
+	dbT, err := s.ticketRepo.GetTicketByID(ticketID)
+	if err != nil {
+		return nil, err
+	}
+
+	if strings.ToLower(role) == "user" && dbT.CreatedBy != userObjectID {
+		return nil, errors.New("no tenés permisos para rechazar el cierre de este ticket")
+	}
+
+	if !dbT.CloseRequested {
+		return nil, errors.New("no se ha solicitado el cierre de este ticket")
+	}
+
+	// Cancelar propuesta de resolución
+	dbT.CloseRequested = false
+	dbT.CloseRequestedBy = nil
+	dbT.UpdatedAt = time.Now()
+
+	err = s.ticketRepo.Update(dbT)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := s.ticketRepo.FindUserByID(userObjectID)
+	fullName := "Usuario"
+	if err == nil && user != nil {
+		fullName = strings.TrimSpace(fmt.Sprintf("%s %s", user.FirstName, user.LastName))
+		if fullName == "" {
+			fullName = user.Username
+		}
+	}
+
+	audit := &models.AuditLog{
+		ID:          primitive.NewObjectID(),
+		TicketID:    dbT.ID,
+		UserID:      userObjectID,
+		Type:        "MESSAGE",
+		Description: fmt.Sprintf("Usuario %s rechazó resolver el ticket. El ticket continúa abierto.", fullName),
+		InsertedAt:  time.Now(),
+	}
+	go func(a *models.AuditLog) { _ = s.ticketRepo.InsertAuditLog(a) }(audit)
+
+	// Mensaje de sistema en el chat
+	systemMsg := &models.DBMessage{
+		ID:          primitive.NewObjectID(),
+		TicketID:    ticketID,
+		SenderID:    "system",
+		Role:        "system",
+		Text:        fmt.Sprintf("El usuario rechazó la resolución del ticket. El ticket continúa abierto."),
+		Attachments: []string{},
+		SentAt:      time.Now(),
+	}
+	_ = s.ticketRepo.InsertMessage(systemMsg)
+
+	return s.populateAPITicket(dbT, s.getTagMap(), make(map[primitive.ObjectID]string), make(map[primitive.ObjectID]string)), nil
 }

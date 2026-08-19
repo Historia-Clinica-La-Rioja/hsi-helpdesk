@@ -109,16 +109,19 @@ func (r *ticketRepository) Update(ticket *models.DBTicket) error {
 
 	filter := bson.M{"_id": ticket.ID}
 	update := bson.M{"$set": bson.M{
-		"body":        ticket.Body,
-		"priority_id": ticket.PriorityID,
-		"state_id":    ticket.StateID,
-		"updated_at":  ticket.UpdatedAt,
-		"edit_count":  ticket.EditCount,
-		"assigned_to": ticket.AssignedTo,
-		"closed_at":   ticket.ClosedAt,
-		"resolved_at": ticket.ResolvedAt,
-		"reopened_at":     ticket.ReopenedAt,
-		"transfer_reason": ticket.TransferReason,
+		"body":               ticket.Body,
+		"priority_id":        ticket.PriorityID,
+		"state_id":           ticket.StateID,
+		"updated_at":         ticket.UpdatedAt,
+		"edit_count":         ticket.EditCount,
+		"assigned_to":        ticket.AssignedTo,
+		"closed_at":          ticket.ClosedAt,
+		"resolved_at":        ticket.ResolvedAt,
+		"reopened_at":        ticket.ReopenedAt,
+		"transfer_reason":    ticket.TransferReason,
+		"close_requested":    ticket.CloseRequested,
+		"close_requested_by": ticket.CloseRequestedBy,
+		"resolved_by":        ticket.ResolvedBy,
 	}}
 
 	_, err := r.ticketsCol.UpdateOne(ctx, filter, update)
