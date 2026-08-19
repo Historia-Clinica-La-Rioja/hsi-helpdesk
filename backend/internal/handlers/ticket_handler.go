@@ -479,3 +479,57 @@ func (h *TicketHandler) RejectClose(c *gin.Context) {
 	c.JSON(http.StatusOK, updated)
 }
 
+type ChangeTicketPriorityRequest struct {
+	Priority string `json:"priority" binding:"required"`
+}
+
+// PUT /api/tickets/:id/priority
+func (h *TicketHandler) ChangeTicketPriority(c *gin.Context) {
+	ticketIDStr := c.Param("id")
+	ticketObjID, err := primitive.ObjectIDFromHex(ticketIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID de ticket inválido"})
+		return
+	}
+
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Usuario no autenticado"})
+		return
+	}
+
+	roleVal, roleExists := c.Get("user_role")
+	role := "user"
+	if roleExists {
+		if r, ok := roleVal.(string); ok {
+			role = r
+		}
+	}
+
+	userIDStr, ok := userIDVal.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token corrupto"})
+		return
+	}
+
+	userObjID, err := primitive.ObjectIDFromHex(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "ID de usuario inválido"})
+		return
+	}
+
+	var req ChangeTicketPriorityRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Datos inválidos: " + err.Error()})
+		return
+	}
+
+	updated, err := h.ticketService.ChangeTicketPriority(userObjID, role, ticketObjID, req.Priority)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, updated)
+}
+

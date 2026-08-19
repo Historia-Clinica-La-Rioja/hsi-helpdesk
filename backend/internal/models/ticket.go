@@ -88,6 +88,8 @@ type APITicket struct {
 	CloseRequested   bool         `json:"close_requested"`
 	CloseRequestedBy string       `json:"close_requested_by,omitempty"`
 	ResolvedBy       string       `json:"resolved_by,omitempty"`
+	CreatorName      string       `json:"creator_name,omitempty"`
+	CreatorEmail     string       `json:"creator_email,omitempty"`
 }
 
 // APIMessage is the comment message returned to the frontend
