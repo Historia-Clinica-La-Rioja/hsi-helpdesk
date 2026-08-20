@@ -37,7 +37,12 @@ export interface Priority {
   ],
   template: `
     <div class="tickets-container">
-      @if (innerViewMode() === 'create') {
+      @if (showInitialLoading()) {
+        <div class="lazy-placeholder">
+          <span class="material-icons loading-spin">sync</span>
+          <p>Cargando información...</p>
+        </div>
+      } @else if (innerViewMode() === 'create') {
         <!-- Create Form View -->
         <div class="ticket-form-card">
           <h2>Nuevo Ticket de Soporte</h2>
@@ -619,6 +624,12 @@ export interface Priority {
                 <h2 style="font-size: 22px; font-weight: 700; color: var(--color-text-primary); margin: 0; line-height: 1.3;">
                   {{ ticket.title }}
                 </h2>
+                @if (currentUserRole() !== 'user') {
+                  <div class="ticket-creator-subtitle" style="font-size: 14px; color: #5f7d8a; margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <span class="material-icons" style="font-size: 18px; color: #7b95a0; vertical-align: middle;">person</span>
+                    <span style="font-weight: 600; color: #26374e;">{{ formatDisplayName(ticket.creator_name || ticket.user_id) }}</span>
+                  </div>
+                }
               </div>
               @if (!isEditing()) {
                 <!-- Display Mode -->
@@ -629,9 +640,24 @@ export interface Priority {
                   </div>
                   <div class="info-block">
                     <span class="info-label">Prioridad</span>
-                    <span class="priority-badge" [ngClass]="getPriorityClass(ticket.priority)">
-                      {{ ticket.priority }}
-                    </span>
+                    @if (currentUserRole() !== 'user') {
+                      <select 
+                        [ngModel]="ticket.priority" 
+                        (change)="onAgentChangePriority(ticket.id, $event)"
+                        class="priority-select-agent"
+                        [ngClass]="getPriorityClass(ticket.priority)"
+                        [disabled]="!!(ticket.assigned_to && ticket.assigned_to !== currentUserId())"
+                      >
+                        <option value="Baja">Baja</option>
+                        <option value="Media">Media</option>
+                        <option value="Alta">Alta</option>
+                        <option value="Crítica">Crítica</option>
+                      </select>
+                    } @else {
+                      <span class="priority-badge" [ngClass]="getPriorityClass(ticket.priority)">
+                        {{ ticket.priority }}
+                      </span>
+                    }
                   </div>
                   <div class="info-block">
                     <span class="info-label">Estado</span>
@@ -644,7 +670,6 @@ export interface Priority {
                           En progreso
                         </span>
                       }
-
                     </div>
                   </div>
                   <div class="info-block">
@@ -719,10 +744,12 @@ export interface Priority {
                             <button 
                               type="button" 
                               class="resolve-action-btn"
+                              [disabled]="!hasAgentCommented(ticket) || ticket.close_requested"
                               (click)="openResolveConfirmation(ticket.id)"
+                              [title]="!hasAgentCommented(ticket) ? 'Debes responder al ticket al menos una vez antes de poder proponer su resolución' : (ticket.close_requested ? 'Ya has solicitado el cierre del ticket' : 'Resolver Ticket')"
                             >
                               <span class="material-icons" style="font-size: 16px; vertical-align: middle;">task_alt</span>
-                              Resolver Ticket
+                              {{ ticket.close_requested ? 'Esperando Usuario' : 'Resolver Ticket' }}
                             </button>
                           } @else {
                             <div class="ticket-resolved-badge-large">
@@ -828,6 +855,24 @@ export interface Priority {
                 </div>
 
                 <!-- Add comment Form -->
+                @if (currentUserRole() === 'user' && ticket.close_requested) {
+                  <div class="close-requested-banner">
+                    <span class="material-icons info-icon">info</span>
+                    <div class="banner-content">
+                      <p class="banner-title">El agente de soporte desea resolver este ticket</p>
+                      <p class="banner-text">¿Estás de acuerdo o tu consulta fue solucionada?</p>
+                    </div>
+                    <div class="banner-actions">
+                      <button type="button" class="reject-btn" (click)="onRejectClose(ticket.id)">
+                        No, mantener abierto
+                      </button>
+                      <button type="button" class="confirm-btn" (click)="onConfirmClose(ticket.id)">
+                        Sí, cerrar ticket
+                      </button>
+                    </div>
+                  </div>
+                }
+
                 @if (currentUserRole() === 'user' || !ticket.assigned_to || ticket.assigned_to === currentUserId()) {
                   <form class="add-comment-form" (submit)="onSubmitComment($event)">
                     <textarea 
@@ -1027,6 +1072,33 @@ export interface Priority {
                 type="button" 
                 class="accept-confirm-btn" 
                 (click)="confirmResolve()"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- Priority Change Confirmation Modal -->
+      @if (showPriorityConfirmModal()) {
+        <div class="confirm-modal-overlay">
+          <div class="confirm-modal-container">
+            <div class="confirm-modal-content">
+              <span class="material-icons confirm-modal-icon" style="color: var(--bot-blue);">low_priority</span>
+              <h3>¿Cambiar Prioridad?</h3>
+              <p>Al confirmar, la prioridad cambiará a "{{ pendingPriorityChange()?.newPriority }}" y el ticket se autoasignará a tu usuario.</p>
+            </div>
+            
+            <div class="confirm-modal-actions">
+              <button type="button" class="cancel-confirm-btn" (click)="closePriorityConfirmModal()">
+                Cancelar
+              </button>
+              <button 
+                type="button" 
+                class="accept-confirm-btn" 
+                style="background: var(--bot-blue);"
+                (click)="confirmPriorityChange()"
               >
                 Confirmar
               </button>
@@ -1240,6 +1312,104 @@ export interface Priority {
     </div>
   `,
   styles: [`
+    .close-requested-banner {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 20px;
+      background: #E8F5E9;
+      border: 1px solid #C8E6C9;
+      border-radius: 12px;
+      margin: 15px 0;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+    }
+
+    .close-requested-banner .info-icon {
+      color: #2E7D32;
+      font-size: 24px;
+    }
+
+    .close-requested-banner .banner-content {
+      flex: 1;
+    }
+
+    .close-requested-banner .banner-title {
+      font-family: var(--font-heading);
+      font-weight: 600;
+      color: #1B5E20;
+      margin: 0 0 4px 0;
+      font-size: 14px;
+    }
+
+    .close-requested-banner .banner-text {
+      font-family: var(--font-body);
+      color: #388E3C;
+      margin: 0;
+      font-size: 13px;
+    }
+
+    .close-requested-banner .banner-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .close-requested-banner button {
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: var(--font-body);
+      transition: all 0.2s ease;
+    }
+
+    .close-requested-banner .reject-btn {
+      background: transparent;
+      border: 1px solid #81C784;
+      color: #2E7D32;
+    }
+
+    .close-requested-banner .reject-btn:hover {
+      background: rgba(46, 125, 50, 0.05);
+      border-color: #2E7D32;
+    }
+
+    .close-requested-banner .confirm-btn {
+      background: #2E7D32;
+      border: 1px solid #2E7D32;
+      color: #ffffff;
+    }
+
+    .close-requested-banner .confirm-btn:hover {
+      background: #1B5E20;
+      border-color: #1B5E20;
+    }
+
+    .lazy-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 400px;
+      color: var(--color-text-muted);
+      gap: 16px;
+    }
+
+    .loading-spin {
+      font-size: 32px;
+      animation: spin 1.2s linear infinite;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .lazy-placeholder p {
+      font-family: var(--font-body);
+      font-size: 14px;
+    }
+
     .tickets-container {
       width: 100%;
       height: 100%;
@@ -1930,6 +2100,56 @@ export interface Priority {
     .priority-badge.media { background-color: #FFF8E6; color: #9A7A00; }
     .priority-badge.alta { background-color: #FFF3E0; color: #E65100; }
     .priority-badge.critica { background-color: #FDF2F2; color: var(--color-error); }
+
+    .priority-select-agent {
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 700;
+      padding: 6px 28px 6px 12px;
+      border-radius: 20px;
+      width: fit-content;
+      text-transform: capitalize;
+      border: 1px solid transparent;
+      outline: none;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23455A64' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      background-size: 12px;
+    }
+    .priority-select-agent:hover {
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+      transform: translateY(-1px);
+    }
+    .priority-select-agent.baja { 
+      background-color: #EDF8F6; 
+      color: #2E9E7A; 
+      border-color: #2E9E7A80; 
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232E9E7A' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    }
+    .priority-select-agent.media { 
+      background-color: #FFF8E6; 
+      color: #9A7A00; 
+      border-color: #9A7A0080; 
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239A7A00' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    }
+    .priority-select-agent.alta { 
+      background-color: #FFF3E0; 
+      color: #E65100; 
+      border-color: #E6510080; 
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23E65100' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    }
+    .priority-select-agent.critica { 
+      background-color: #FDF2F2; 
+      color: var(--color-error); 
+      border-color: var(--color-error); 
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e05858' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    }
 
     .detail-description-section h4, .detail-attachments-section h4 {
       font-family: var(--font-heading);
@@ -3934,7 +4154,7 @@ export class TicketsTabComponent implements OnInit {
   private pollingSub?: Subscription;
   private route = inject(ActivatedRoute);
   private router = inject(Router);
-  private initialViewDecided = false;
+  private initialViewDecided = signal(false);
 
   @ViewChild('commentsList') commentsList?: ElementRef<HTMLDivElement>;
 
@@ -4070,6 +4290,8 @@ export class TicketsTabComponent implements OnInit {
   archivedTicketIds = signal<string[]>([]);
   showResolveConfirmModal = signal(false);
   ticketToResolveId = signal('');
+  showPriorityConfirmModal = signal(false);
+  pendingPriorityChange = signal<{ ticketId: string, newPriority: string, selectEl: any } | null>(null);
 
   activeTickets = computed(() => {
     const all = this.ticketService.tickets();
@@ -4254,6 +4476,11 @@ export class TicketsTabComponent implements OnInit {
   @Output() ticketSelected = new EventEmitter<Ticket>();
 
   innerViewMode = signal<'create' | 'list' | 'detail' | 'archived'>('create');
+  showInitialLoading = computed(() => {
+    const user = this.authService.currentUser();
+    const urlView = this.route.snapshot.queryParams['view'];
+    return !!user && !urlView && !this.ticketService.ticketsLoaded() && !this.initialViewDecided();
+  });
 
   selectedTicket = signal<Ticket | null>(null);
   currentUserRole = computed(() => this.authService.currentUser()?.role || '');
@@ -4638,6 +4865,16 @@ export class TicketsTabComponent implements OnInit {
   constructor() {
     this.initForm();
 
+    // Set initial view for agents immediately to avoid flash of user-only create form
+    const user = this.authService.currentUser();
+    const urlView = this.route.snapshot.queryParams['view'];
+    if (user && !urlView) {
+      if (user.role !== 'user') {
+        this.innerViewMode.set('list');
+        this.initialViewDecided.set(true);
+      }
+    }
+
     // Effect to scroll comments list to bottom when selected ticket or comments change
     effect(() => {
       this.selectedTicket();
@@ -4652,21 +4889,31 @@ export class TicketsTabComponent implements OnInit {
         this.initLastSeenTimes(user.id);
         this.initReadTickets(user.id);
 
-        // Load user-scoped archived tickets
+        // Load user-scoped archived tickets (by username for database restart persistence)
         try {
-          const savedArchived = localStorage.getItem(`hsi_archived_tickets_${user.id}`);
+          const usernameKey = `hsi_archived_tickets_${user.username}`;
+          const savedArchived = localStorage.getItem(usernameKey);
           if (savedArchived) {
             this.archivedTicketIds.set(JSON.parse(savedArchived));
           } else {
-            // Check for legacy shared archived tickets to migrate/use
-            const legacyArchived = localStorage.getItem('hsi_archived_tickets');
-            if (legacyArchived) {
-              const legacyIds = JSON.parse(legacyArchived);
-              this.archivedTicketIds.set(legacyIds);
-              // Migrate it to scoped
-              localStorage.setItem(`hsi_archived_tickets_${user.id}`, legacyArchived);
+            // Check for user ID-scoped archived tickets (previous version) to migrate
+            const userIdKey = `hsi_archived_tickets_${user.id}`;
+            const userIdArchived = localStorage.getItem(userIdKey);
+            if (userIdArchived) {
+              const ids = JSON.parse(userIdArchived);
+              this.archivedTicketIds.set(ids);
+              localStorage.setItem(usernameKey, userIdArchived);
             } else {
-              this.archivedTicketIds.set([]);
+              // Check for legacy shared archived tickets to migrate/use
+              const legacyArchived = localStorage.getItem('hsi_archived_tickets');
+              if (legacyArchived) {
+                const legacyIds = JSON.parse(legacyArchived);
+                this.archivedTicketIds.set(legacyIds);
+                // Migrate it to scoped
+                localStorage.setItem(usernameKey, legacyArchived);
+              } else {
+                this.archivedTicketIds.set([]);
+              }
             }
           }
         } catch (e) {
@@ -4776,8 +5023,8 @@ export class TicketsTabComponent implements OnInit {
       const loaded = this.ticketService.ticketsLoaded();
       const urlView = this.route.snapshot.queryParams['view'];
 
-      if (user && loaded && !urlView && !this.initialViewDecided) {
-        this.initialViewDecided = true;
+      if (user && loaded && !urlView && !this.initialViewDecided()) {
+        this.initialViewDecided.set(true);
         if (user.role !== 'user') {
           this.setViewMode('list');
         } else {
@@ -4908,7 +5155,7 @@ export class TicketsTabComponent implements OnInit {
     if (n.includes('baja')) return 'baja';
     if (n.includes('media')) return 'media';
     if (n.includes('alta')) return 'alta';
-    if (n.includes('crit') || n.includes('crít')) return 'critica';
+    if (n.includes('urgente') || n.includes('crit') || n.includes('crít')) return 'critica';
     return 'baja';
   }
 
@@ -4960,14 +5207,14 @@ export class TicketsTabComponent implements OnInit {
   }
 
   archiveTicket(ticketId: string): void {
-    const userId = this.currentUserId();
-    if (!userId) return;
+    const user = this.authService.currentUser();
+    if (!user || !user.username) return;
     const current = this.archivedTicketIds();
     if (!current.includes(ticketId)) {
       const updated = [...current, ticketId];
       this.archivedTicketIds.set(updated);
       try {
-        localStorage.setItem(`hsi_archived_tickets_${userId}`, JSON.stringify(updated));
+        localStorage.setItem(`hsi_archived_tickets_${user.username}`, JSON.stringify(updated));
       } catch (e) {
         console.error('Error saving archived tickets:', e);
       }
@@ -4975,13 +5222,13 @@ export class TicketsTabComponent implements OnInit {
   }
 
   unarchiveTicket(ticketId: string): void {
-    const userId = this.currentUserId();
-    if (!userId) return;
+    const user = this.authService.currentUser();
+    if (!user || !user.username) return;
     const current = this.archivedTicketIds();
     const updated = current.filter(id => id !== ticketId);
     this.archivedTicketIds.set(updated);
     try {
-      localStorage.setItem(`hsi_archived_tickets_${userId}`, JSON.stringify(updated));
+      localStorage.setItem(`hsi_archived_tickets_${user.username}`, JSON.stringify(updated));
     } catch (e) {
       console.error('Error saving archived tickets:', e);
     }
@@ -5515,6 +5762,116 @@ export class TicketsTabComponent implements OnInit {
       this.changeStatusQuick(id, 'resuelto');
     }
     this.closeResolveConfirmation();
+  }
+
+  hasAgentCommented(ticket: Ticket): boolean {
+    if (!ticket || !ticket.messages) return false;
+    return ticket.messages.some(m => m.role === 'agent' || m.role === 'admin' || m.role === 'owner');
+  }
+
+  onConfirmClose(ticketId: string): void {
+    this.ticketService.confirmClose(ticketId).subscribe({
+      next: (updatedTicket) => {
+        const parsed = {
+          ...updatedTicket,
+          created_at: new Date(updatedTicket.created_at),
+          updated_at: new Date(updatedTicket.updated_at),
+          closed_at: updatedTicket.closed_at ? new Date(updatedTicket.closed_at) : undefined,
+          resolved_at: updatedTicket.resolved_at ? new Date(updatedTicket.resolved_at) : undefined,
+          reopened_at: updatedTicket.reopened_at ? new Date(updatedTicket.reopened_at) : undefined,
+          messages: updatedTicket.messages ? updatedTicket.messages.map((m: any) => ({
+            ...m,
+            created_at: new Date(m.created_at)
+          })) : []
+        };
+        this.selectedTicket.set(parsed);
+      },
+      error: (err) => {
+        console.error('Error confirming ticket resolution:', err);
+      }
+    });
+  }
+
+  onRejectClose(ticketId: string): void {
+    this.ticketService.rejectClose(ticketId).subscribe({
+      next: (updatedTicket) => {
+        const parsed = {
+          ...updatedTicket,
+          created_at: new Date(updatedTicket.created_at),
+          updated_at: new Date(updatedTicket.updated_at),
+          closed_at: updatedTicket.closed_at ? new Date(updatedTicket.closed_at) : undefined,
+          resolved_at: updatedTicket.resolved_at ? new Date(updatedTicket.resolved_at) : undefined,
+          reopened_at: updatedTicket.reopened_at ? new Date(updatedTicket.reopened_at) : undefined,
+          messages: updatedTicket.messages ? updatedTicket.messages.map((m: any) => ({
+            ...m,
+            created_at: new Date(m.created_at)
+          })) : []
+        };
+        this.selectedTicket.set(parsed);
+      },
+      error: (err) => {
+        console.error('Error rejecting ticket resolution:', err);
+      }
+    });
+  }
+
+  onAgentChangePriority(ticketId: string, event: Event): void {
+    const selectEl = event.target as HTMLSelectElement;
+    if (!selectEl) return;
+    const newPriority = selectEl.value;
+
+    const currentTicket = this.selectedTicket();
+    const oldPriority = currentTicket?.priority || 'Media';
+
+    if (newPriority === oldPriority) return;
+
+    this.pendingPriorityChange.set({ ticketId, newPriority, selectEl });
+    this.showPriorityConfirmModal.set(true);
+  }
+
+  closePriorityConfirmModal(): void {
+    const pending = this.pendingPriorityChange();
+    if (pending && pending.selectEl) {
+      const currentTicket = this.selectedTicket();
+      pending.selectEl.value = currentTicket?.priority || 'Media';
+    }
+    this.showPriorityConfirmModal.set(false);
+    this.pendingPriorityChange.set(null);
+  }
+
+  confirmPriorityChange(): void {
+    const pending = this.pendingPriorityChange();
+    if (!pending) return;
+
+    this.showPriorityConfirmModal.set(false);
+
+    this.ticketService.changePriority(pending.ticketId, pending.newPriority).subscribe({
+      next: (updatedTicket) => {
+        const parsed = {
+          ...updatedTicket,
+          created_at: new Date(updatedTicket.created_at),
+          updated_at: new Date(updatedTicket.updated_at),
+          closed_at: updatedTicket.closed_at ? new Date(updatedTicket.closed_at) : undefined,
+          resolved_at: updatedTicket.resolved_at ? new Date(updatedTicket.resolved_at) : undefined,
+          reopened_at: updatedTicket.reopened_at ? new Date(updatedTicket.reopened_at) : undefined,
+          messages: updatedTicket.messages ? updatedTicket.messages.map((m: any) => ({
+            ...m,
+            created_at: new Date(m.created_at)
+          })) : []
+        };
+        this.selectedTicket.set(parsed);
+        this.pendingPriorityChange.set(null);
+      },
+      error: (err) => {
+        console.error('Error changing ticket priority:', err);
+        if (pending.selectEl) {
+          const currentTicket = this.selectedTicket();
+          pending.selectEl.value = currentTicket?.priority || 'Media';
+        }
+        this.pendingPriorityChange.set(null);
+        alert('No se pudo cambiar la prioridad del ticket: ' + (err.error?.error || err.message));
+      }
+    });
   }
 }
 

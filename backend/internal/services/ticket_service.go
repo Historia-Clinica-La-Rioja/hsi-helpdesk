@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/models"
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/repositories"
@@ -64,6 +65,9 @@ type TicketService interface {
 	AssignTicket(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID, agentObjectID primitive.ObjectID, reason string) (*models.APITicket, error)
 	GetAgents() ([]models.User, error)
 	GetTags() ([]models.Tag, error)
+	ConfirmClose(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID) (*models.APITicket, error)
+	RejectClose(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID) (*models.APITicket, error)
+	ChangeTicketPriority(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID, newPriority string) (*models.APITicket, error)
 }
 
 type ticketService struct {
@@ -568,23 +572,7 @@ func (s *ticketService) UpdateTicketStatus(userObjectID primitive.ObjectID, role
 		}
 	}
 
-	stateID, ok := StateNameToID[strings.ToLower(newStatus)]
-	if !ok {
-		return nil, errors.New("estado de ticket inválido")
-	}
-
-	dbT.StateID = stateID
 	dbT.UpdatedAt = time.Now()
-	if strings.ToLower(newStatus) == "resuelto" || strings.ToLower(newStatus) == "cerrado" {
-		now := time.Now()
-		dbT.ResolvedAt = &now
-		dbT.ClosedAt = &now
-	}
-
-	err = s.ticketRepo.Update(dbT)
-	if err != nil {
-		return nil, err
-	}
 
 	user, err := s.ticketRepo.FindUserByID(userObjectID)
 	fullName := "Agente de Soporte"
@@ -595,15 +583,65 @@ func (s *ticketService) UpdateTicketStatus(userObjectID primitive.ObjectID, role
 		}
 	}
 
-	audit := &models.AuditLog{
-		ID:          primitive.NewObjectID(),
-		TicketID:    dbT.ID,
-		UserID:      userObjectID,
-		Type:        "MESSAGE",
-		Description: fmt.Sprintf("Agente %s cambió el estado del ticket a %s", fullName, newStatus),
-		InsertedAt:  time.Now(),
+	if strings.ToLower(newStatus) == "resuelto" || strings.ToLower(newStatus) == "cerrado" {
+		// 1. Verificar que el agente haya comentado al menos una vez
+		dbMsgs, err := s.ticketRepo.GetMessagesByTicketID(ticketID)
+		if err != nil {
+			return nil, fmt.Errorf("error loading messages: %w", err)
+		}
+		hasAgentComment := false
+		for _, msg := range dbMsgs {
+			if msg.Role == "agent" || msg.Role == "admin" || msg.Role == "owner" {
+				hasAgentComment = true
+				break
+			}
+		}
+		if !hasAgentComment {
+			return nil, errors.New("debes responder al ticket al menos una vez antes de poder resolverlo")
+		}
+
+		// 2. Proponer resolución (no cambia el estado a resuelto inmediatamente)
+		dbT.CloseRequested = true
+		dbT.CloseRequestedBy = &userObjectID
+
+		err = s.ticketRepo.Update(dbT)
+		if err != nil {
+			return nil, err
+		}
+
+		audit := &models.AuditLog{
+			ID:          primitive.NewObjectID(),
+			TicketID:    dbT.ID,
+			UserID:      userObjectID,
+			Type:        "MESSAGE",
+			Description: fmt.Sprintf("Agente %s propuso resolver el ticket. Esperando confirmación del usuario.", fullName),
+			InsertedAt:  time.Now(),
+		}
+		go func(a *models.AuditLog) { _ = s.ticketRepo.InsertAuditLog(a) }(audit)
+
+	} else {
+		// Para otros estados (como "en_progreso", "transferido", "reabierto"), actualizamos el StateID directamente
+		stateID, ok := StateNameToID[strings.ToLower(newStatus)]
+		if !ok {
+			return nil, errors.New("estado de ticket inválido")
+		}
+		dbT.StateID = stateID
+
+		err = s.ticketRepo.Update(dbT)
+		if err != nil {
+			return nil, err
+		}
+
+		audit := &models.AuditLog{
+			ID:          primitive.NewObjectID(),
+			TicketID:    dbT.ID,
+			UserID:      userObjectID,
+			Type:        "MESSAGE",
+			Description: fmt.Sprintf("Agente %s cambió el estado del ticket a %s", fullName, newStatus),
+			InsertedAt:  time.Now(),
+		}
+		go func(a *models.AuditLog) { _ = s.ticketRepo.InsertAuditLog(a) }(audit)
 	}
-	go func(a *models.AuditLog) { _ = s.ticketRepo.InsertAuditLog(a) }(audit)
 
 	return s.populateAPITicket(dbT, s.getTagMap(), make(map[primitive.ObjectID]string), make(map[primitive.ObjectID]string)), nil
 }
@@ -643,20 +681,25 @@ func (s *ticketService) AssignTicket(userObjectID primitive.ObjectID, role strin
 	user, err := s.ticketRepo.FindUserByID(userObjectID)
 	fullName := "Agente de Soporte"
 	if err == nil && user != nil {
-		fullName = strings.TrimSpace(fmt.Sprintf("%s %s", user.FirstName, user.LastName))
-		if fullName == "" {
+		rawFullName := strings.TrimSpace(fmt.Sprintf("%s %s", user.FirstName, user.LastName))
+		if rawFullName == "" {
 			fullName = user.Username
+		} else {
+			fullName = formatNameCasing(rawFullName)
 		}
 	}
 
 	agentName := strings.TrimSpace(fmt.Sprintf("%s %s", agent.FirstName, agent.LastName))
+	var formattedAgentName string
 	if agentName == "" {
-		agentName = agent.Username
+		formattedAgentName = agent.Username
+	} else {
+		formattedAgentName = formatNameCasing(agentName)
 	}
 
-	desc := fmt.Sprintf("Agente %s reasignó el ticket a %s", fullName, agentName)
+	desc := fmt.Sprintf("Agente %s reasignó el ticket a %s", fullName, formattedAgentName)
 	if reason != "" {
-		desc = fmt.Sprintf("Agente %s reasignó el ticket a %s. Motivo: %s", fullName, agentName, reason)
+		desc = fmt.Sprintf("Agente %s reasignó el ticket a %s. Motivo: %s", fullName, formattedAgentName, reason)
 	}
 
 	audit := &models.AuditLog{
@@ -675,11 +718,23 @@ func (s *ticketService) AssignTicket(userObjectID primitive.ObjectID, role strin
 		TicketID:    ticketID,
 		SenderID:    "system",
 		Role:        "system",
-		Text:        fmt.Sprintf("Han transferido tu ticket a un usuario especializado en el tema que están tratando -> %s", agentName),
+		Text:        fmt.Sprintf("Han transferido tu ticket a un usuario especializado en el tema que están tratando -> %s", formattedAgentName),
 		Attachments: []string{},
 		SentAt:      time.Now(),
 	}
 	_ = s.ticketRepo.InsertMessage(transferMsg)
+
+	// Insert welcome message as an automatic agent reply
+	welcomeMsg := &models.DBMessage{
+		ID:          primitive.NewObjectID(),
+		TicketID:    ticketID,
+		SenderID:    agentObjectID.Hex(),
+		Role:        "agent",
+		Text:        fmt.Sprintf("Hola soy %s, y ya puedo ver todo el historial de mensajes anteriores para continuar con la resolución de tu consulta.", formattedAgentName),
+		Attachments: []string{},
+		SentAt:      time.Now().Add(time.Second),
+	}
+	_ = s.ticketRepo.InsertMessage(welcomeMsg)
 
 	return s.populateAPITicket(dbT, s.getTagMap(), make(map[primitive.ObjectID]string), make(map[primitive.ObjectID]string)), nil
 }
@@ -787,6 +842,14 @@ func (s *ticketService) populateAPITicket(dbT *models.DBTicket, tagMap map[primi
 		ResolvedAt:     dbT.ResolvedAt,
 		ReopenedAt:     dbT.ReopenedAt,
 		TransferReason: dbT.TransferReason,
+		CloseRequested: dbT.CloseRequested,
+	}
+
+	if dbT.CloseRequestedBy != nil {
+		apiT.CloseRequestedBy = dbT.CloseRequestedBy.Hex()
+	}
+	if dbT.ResolvedBy != nil {
+		apiT.ResolvedBy = dbT.ResolvedBy.Hex()
 	}
 
 	tagsList := make([]string, 0, len(dbT.Tags))
@@ -810,22 +873,20 @@ func (s *ticketService) populateAPITicket(dbT *models.DBTicket, tagMap map[primi
 		apiT.AssignedTo = dbT.AssignedTo.Hex()
 	}
 
-	// OPTIMIZACIÓN: Resolver Usuario con Caché
-	if cachedName, ok := userCache[dbT.CreatedBy]; ok {
-		apiT.UserID = cachedName
-	} else {
-		if user, err := s.ticketRepo.FindUserByID(dbT.CreatedBy); err == nil {
-			fullName := strings.TrimSpace(fmt.Sprintf("%s %s", user.FirstName, user.LastName))
-			if fullName != "" {
-				apiT.UserID = fullName
-				userCache[dbT.CreatedBy] = fullName
-			} else {
-				apiT.UserID = user.Username
-				userCache[dbT.CreatedBy] = user.Username
-			}
+	// OPTIMIZACIÓN: Resolver Usuario
+	if user, err := s.ticketRepo.FindUserByID(dbT.CreatedBy); err == nil {
+		fullName := strings.TrimSpace(fmt.Sprintf("%s %s", user.FirstName, user.LastName))
+		if fullName != "" {
+			apiT.UserID = fullName
+			apiT.CreatorName = fullName
 		} else {
-			userCache[dbT.CreatedBy] = "Usuario General"
+			apiT.UserID = user.Username
+			apiT.CreatorName = user.Username
 		}
+		apiT.CreatorEmail = user.Username
+	} else {
+		apiT.UserID = "Usuario General"
+		apiT.CreatorName = "Usuario General"
 	}
 
 	// OPTIMIZACIÓN: Resolver Institución con Caché
@@ -880,4 +941,240 @@ func resolveSpecialization(spec string, tags []models.DBTag) string {
 		}
 	}
 	return current
+}
+
+func (s *ticketService) ConfirmClose(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID) (*models.APITicket, error) {
+	dbT, err := s.ticketRepo.GetTicketByID(ticketID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Solo el creador del ticket (usuario) o el agente asignado pueden confirmar el cierre
+	if strings.ToLower(role) == "user" && dbT.CreatedBy != userObjectID {
+		return nil, errors.New("no tenés permisos para confirmar el cierre de este ticket")
+	}
+
+	if !dbT.CloseRequested {
+		return nil, errors.New("no se ha solicitado el cierre de este ticket")
+	}
+
+	// Cerrar ticket
+	dbT.StateID = StateNameToID["resuelto"]
+	now := time.Now()
+	dbT.ResolvedAt = &now
+	dbT.ClosedAt = &now
+	dbT.ResolvedBy = dbT.CloseRequestedBy // El agente que propuso la resolución
+	dbT.CloseRequested = false
+	dbT.CloseRequestedBy = nil
+	dbT.UpdatedAt = now
+
+	err = s.ticketRepo.Update(dbT)
+	if err != nil {
+		return nil, err
+	}
+
+	// Nombre del usuario que confirma
+	user, err := s.ticketRepo.FindUserByID(userObjectID)
+	fullName := "Usuario"
+	if err == nil && user != nil {
+		fullName = strings.TrimSpace(fmt.Sprintf("%s %s", user.FirstName, user.LastName))
+		if fullName == "" {
+			fullName = user.Username
+		}
+	}
+
+	audit := &models.AuditLog{
+		ID:          primitive.NewObjectID(),
+		TicketID:    dbT.ID,
+		UserID:      userObjectID,
+		Type:        "MESSAGE",
+		Description: fmt.Sprintf("Usuario %s aceptó resolver el ticket. Ticket Cerrado.", fullName),
+		InsertedAt:  time.Now(),
+	}
+	go func(a *models.AuditLog) { _ = s.ticketRepo.InsertAuditLog(a) }(audit)
+
+	// Mensaje de sistema en el chat
+	systemMsg := &models.DBMessage{
+		ID:          primitive.NewObjectID(),
+		TicketID:    ticketID,
+		SenderID:    "system",
+		Role:        "system",
+		Text:        fmt.Sprintf("El usuario aceptó resolver el ticket. Ticket cerrado exitosamente."),
+		Attachments: []string{},
+		SentAt:      time.Now(),
+	}
+	_ = s.ticketRepo.InsertMessage(systemMsg)
+
+	return s.populateAPITicket(dbT, s.getTagMap(), make(map[primitive.ObjectID]string), make(map[primitive.ObjectID]string)), nil
+}
+
+func (s *ticketService) RejectClose(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID) (*models.APITicket, error) {
+	dbT, err := s.ticketRepo.GetTicketByID(ticketID)
+	if err != nil {
+		return nil, err
+	}
+
+	if strings.ToLower(role) == "user" && dbT.CreatedBy != userObjectID {
+		return nil, errors.New("no tenés permisos para rechazar el cierre de este ticket")
+	}
+
+	if !dbT.CloseRequested {
+		return nil, errors.New("no se ha solicitado el cierre de este ticket")
+	}
+
+	// Cancelar propuesta de resolución
+	dbT.CloseRequested = false
+	dbT.CloseRequestedBy = nil
+	dbT.UpdatedAt = time.Now()
+
+	err = s.ticketRepo.Update(dbT)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := s.ticketRepo.FindUserByID(userObjectID)
+	fullName := "Usuario"
+	if err == nil && user != nil {
+		fullName = strings.TrimSpace(fmt.Sprintf("%s %s", user.FirstName, user.LastName))
+		if fullName == "" {
+			fullName = user.Username
+		}
+	}
+
+	audit := &models.AuditLog{
+		ID:          primitive.NewObjectID(),
+		TicketID:    dbT.ID,
+		UserID:      userObjectID,
+		Type:        "MESSAGE",
+		Description: fmt.Sprintf("Usuario %s rechazó resolver el ticket. El ticket continúa abierto.", fullName),
+		InsertedAt:  time.Now(),
+	}
+	go func(a *models.AuditLog) { _ = s.ticketRepo.InsertAuditLog(a) }(audit)
+
+	// Mensaje de sistema en el chat
+	systemMsg := &models.DBMessage{
+		ID:          primitive.NewObjectID(),
+		TicketID:    ticketID,
+		SenderID:    "system",
+		Role:        "system",
+		Text:        fmt.Sprintf("El usuario rechazó la resolución del ticket. El ticket continúa abierto."),
+		Attachments: []string{},
+		SentAt:      time.Now(),
+	}
+	_ = s.ticketRepo.InsertMessage(systemMsg)
+
+	return s.populateAPITicket(dbT, s.getTagMap(), make(map[primitive.ObjectID]string), make(map[primitive.ObjectID]string)), nil
+}
+
+func (s *ticketService) ChangeTicketPriority(userObjectID primitive.ObjectID, role string, ticketID primitive.ObjectID, newPriority string) (*models.APITicket, error) {
+	if strings.ToLower(role) == "user" {
+		return nil, errors.New("solo el personal de soporte puede cambiar la prioridad de los tickets")
+	}
+
+	dbT, err := s.ticketRepo.GetTicketByID(ticketID)
+	if err != nil {
+		return nil, err
+	}
+
+	normalized := strings.ToLower(newPriority)
+	var lookupKey string
+	switch normalized {
+	case "baja":
+		lookupKey = "Baja"
+	case "media":
+		lookupKey = "Media"
+	case "alta":
+		lookupKey = "Alta"
+	case "urgente", "critica", "crítica":
+		lookupKey = "Crítica"
+	default:
+		return nil, errors.New("prioridad inválida")
+	}
+
+	prioID, ok := PriorityNameToID[lookupKey]
+	if !ok {
+		return nil, errors.New("prioridad inválida")
+	}
+
+	// Verification: check if the ticket is assigned to someone else
+	if dbT.AssignedTo != nil && *dbT.AssignedTo != userObjectID {
+		return nil, errors.New("solo el agente asignado a este ticket puede modificar su prioridad")
+	}
+
+	alreadyAssigned := false
+	if dbT.AssignedTo != nil && *dbT.AssignedTo == userObjectID {
+		alreadyAssigned = true
+	}
+
+	// 1. Actualizar prioridad
+	dbT.PriorityID = prioID
+	
+	// 2. Asignar automáticamente a sí mismo if not already assigned
+	if !alreadyAssigned {
+		dbT.AssignedTo = &userObjectID
+	}
+	dbT.UpdatedAt = time.Now()
+
+	err = s.ticketRepo.Update(dbT)
+	if err != nil {
+		return nil, err
+	}
+
+	// Logs / Audits
+	user, err := s.ticketRepo.FindUserByID(userObjectID)
+	fullName := "Agente de Soporte"
+	if err == nil && user != nil {
+		rawFullName := strings.TrimSpace(fmt.Sprintf("%s %s", user.FirstName, user.LastName))
+		if rawFullName == "" {
+			fullName = user.Username
+		} else {
+			fullName = formatNameCasing(rawFullName)
+		}
+	}
+
+	var msgText string
+	var auditText string
+	if alreadyAssigned {
+		msgText = fmt.Sprintf("El agente %s cambió la prioridad a %s.", fullName, lookupKey)
+		auditText = fmt.Sprintf("Agente %s cambió la prioridad a %s", fullName, lookupKey)
+	} else {
+		msgText = fmt.Sprintf("El agente %s cambió la prioridad a %s y se autoasignó el ticket.", fullName, lookupKey)
+		auditText = fmt.Sprintf("Agente %s cambió la prioridad a %s (Auto-asignado)", fullName, lookupKey)
+	}
+
+	audit := &models.AuditLog{
+		ID:          primitive.NewObjectID(),
+		TicketID:    dbT.ID,
+		UserID:      userObjectID,
+		Type:        "MESSAGE",
+		Description: auditText,
+		InsertedAt:  time.Now(),
+	}
+	go func(a *models.AuditLog) { _ = s.ticketRepo.InsertAuditLog(a) }(audit)
+
+	// Chat System Message
+	systemMsg := &models.DBMessage{
+		ID:          primitive.NewObjectID(),
+		TicketID:    ticketID,
+		SenderID:    "system",
+		Role:        "system",
+		Text:        msgText,
+		Attachments: []string{},
+		SentAt:      time.Now(),
+	}
+	_ = s.ticketRepo.InsertMessage(systemMsg)
+
+	return s.populateAPITicket(dbT, s.getTagMap(), make(map[primitive.ObjectID]string), make(map[primitive.ObjectID]string)), nil
+}
+
+func formatNameCasing(name string) string {
+	words := strings.Fields(strings.ToLower(name))
+	for i, word := range words {
+		if len(word) > 0 {
+			runes := []rune(word)
+			runes[0] = unicode.ToUpper(runes[0])
+			words[i] = string(runes)
+		}
+	}
+	return strings.Join(words, " ")
 }

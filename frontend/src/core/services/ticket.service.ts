@@ -30,6 +30,11 @@ export interface Ticket {
   resolved_at?: Date;
   reopened_at?: Date;
   transfer_reason?: string;
+  close_requested?: boolean;
+  close_requested_by?: string;
+  resolved_by?: string;
+  creator_name?: string;
+  creator_email?: string;
 }
 
 @Injectable({
@@ -250,6 +255,96 @@ export class TicketService {
           if (t.id === id) {
             return {
               ...t,
+              status: res.status,
+              updated_at: new Date(res.updated_at),
+              closed_at: res.closed_at ? new Date(res.closed_at) : undefined,
+              resolved_at: res.resolved_at ? new Date(res.resolved_at) : undefined,
+              reopened_at: res.reopened_at ? new Date(res.reopened_at) : undefined,
+              close_requested: res.close_requested,
+              close_requested_by: res.close_requested_by,
+              resolved_by: res.resolved_by
+            };
+          }
+          return t;
+        });
+        this.allTickets.set(updated);
+      })
+    );
+  }
+
+  confirmClose(id: string): Observable<any> {
+    const token = this.auth.token();
+    return this.http.post<any>(`${this.apiUrl}/tickets/${id}/close/confirm`, {}, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    }).pipe(
+      tap(res => {
+        const updated = this.allTickets().map(t => {
+          if (t.id === id) {
+            return {
+              ...t,
+              status: res.status,
+              updated_at: new Date(res.updated_at),
+              closed_at: res.closed_at ? new Date(res.closed_at) : undefined,
+              resolved_at: res.resolved_at ? new Date(res.resolved_at) : undefined,
+              reopened_at: res.reopened_at ? new Date(res.reopened_at) : undefined,
+              close_requested: res.close_requested,
+              close_requested_by: res.close_requested_by,
+              resolved_by: res.resolved_by
+            };
+          }
+          return t;
+        });
+        this.allTickets.set(updated);
+      })
+    );
+  }
+
+  rejectClose(id: string): Observable<any> {
+    const token = this.auth.token();
+    return this.http.post<any>(`${this.apiUrl}/tickets/${id}/close/reject`, {}, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    }).pipe(
+      tap(res => {
+        const updated = this.allTickets().map(t => {
+          if (t.id === id) {
+            return {
+              ...t,
+              status: res.status,
+              updated_at: new Date(res.updated_at),
+              closed_at: res.closed_at ? new Date(res.closed_at) : undefined,
+              resolved_at: res.resolved_at ? new Date(res.resolved_at) : undefined,
+              reopened_at: res.reopened_at ? new Date(res.reopened_at) : undefined,
+              close_requested: res.close_requested,
+              close_requested_by: res.close_requested_by
+            };
+          }
+          return t;
+        });
+        this.allTickets.set(updated);
+      })
+    );
+  }
+
+  changePriority(id: string, priority: string): Observable<any> {
+    const token = this.auth.token();
+    return this.http.put<any>(`${this.apiUrl}/tickets/${id}/priority`, {
+      priority: priority
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    }).pipe(
+      tap(res => {
+        const updated = this.allTickets().map(t => {
+          if (t.id === id) {
+            return {
+              ...t,
+              priority: res.priority,
+              assigned_to: res.assigned_to,
               status: res.status,
               updated_at: new Date(res.updated_at),
               closed_at: res.closed_at ? new Date(res.closed_at) : undefined,
