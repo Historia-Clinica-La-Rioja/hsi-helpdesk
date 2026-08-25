@@ -9,7 +9,7 @@ const authGuard = () => {
   if (auth.isLoggedIn()) {
     return true;
   }
-  router.navigate(['/login']);
+  router.navigate(['/login/user']);
   return false;
 };
 
@@ -24,10 +24,22 @@ const loginGuard = () => {
 };
 
 export const routes: Routes = [
+  // 1. Ruta para usuarios HSI
+  {
+    path: 'login/user',
+    canActivate: [loginGuard],
+    loadComponent: () => import('../features/auth/user/login-user.component').then(m => m.LoginUserComponent)
+  },
+  // 2. Ruta oculta para Administradores
+  {
+    path: 'login/admin',
+    canActivate: [loginGuard],
+    loadComponent: () => import('../features/auth/admin/login-admin.component').then(m => m.LoginAdminComponent)
+  },
   {
     path: 'login',
-    canActivate: [loginGuard],
-    loadComponent: () => import('../features/auth/login.component').then(m => m.LoginComponent)
+    redirectTo: 'login/user',
+    pathMatch: 'full'
   },
   {
     path: 'sso-redirect',
@@ -63,11 +75,11 @@ export const routes: Routes = [
   },
   {
     path: '',
-    redirectTo: 'login',
+    redirectTo: 'login/user',
     pathMatch: 'full'
   },
   {
     path: '**',
-    redirectTo: 'login'
+    redirectTo: 'login/user'
   }
 ];

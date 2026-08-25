@@ -1,0 +1,54 @@
+<div class="hsi-page">
+  <hsi-halftone class="hsi-halftone"></hsi-halftone>
+  <div class="hsi-blob hsi-blob--a" aria-hidden="true"></div>
+  <div class="hsi-blob hsi-blob--b" aria-hidden="true"></div>
+
+  <header class="hsi-header">
+    <div class="hsi-logos">
+      <img class="hsi-logo hsi-logo--escudo" src="assets/logos/provincia.svg" alt="Escudo de la Provincia de La Rioja" />
+      <span class="hsi-logo-sep" aria-hidden="true"></span>
+      <img class="hsi-logo hsi-logo--min" src="assets/logos/ministerio.svg" alt="Ministerio de Salud" />
+    </div>
+  </header>
+
+  <main class="hsi-main">
+    <hsi-robot-logo size="clamp(160px, 25vh, 250px)"></hsi-robot-logo>
+    <h1 class="hsi-title">Soporte a Usuarios HSI</h1>
+
+    <section class="hsi-card">
+      <p class="hsi-help-text">
+        Accedé con tu usuario de Historia de Salud Integrada (email institucional) y DNI
+        para reportar incidentes, consultar el estado de tus tickets y acceder a recursos.
+      </p>
+
+      <form (submit)="onSubmit($event)">
+        <!-- Campo de Email -->
+        <label class="hsi-label" for="hsi-email">Usuario HSI (Email)</label>
+        <div class="hsi-field" [class.has-error]="errorMessage() && !hsiEmail">
+          <span class="material-icons hsi-i" aria-hidden="true">email</span>
+          <input id="hsi-email" type="email" name="hsiEmail" [(ngModel)]="hsiEmail" placeholder="usuario@salud.larioja.gob.ar" [disabled]="isLoading()" required />
+        </div>
+
+        <!-- Campo de DNI -->
+        <label class="hsi-label" for="hsi-dni">DNI</label>
+        <div class="hsi-field" [class.has-error]="errorMessage() && !hsiDni">
+          <span class="material-icons hsi-i" aria-hidden="true">badge</span>
+          <input id="hsi-dni" type="text" inputmode="numeric" name="hsiDni" [(ngModel)]="hsiDni" placeholder="Ingresá tu DNI" [disabled]="isLoading()" pattern="[0-9]*" required />
+        </div>
+
+        @if (errorMessage()) {
+          <span class="hsi-error-msg">{{ errorMessage() }}</span>
+        }
+
+        <button type="submit" class="hsi-submit" [disabled]="isLoading()">
+          @if (isLoading()) { <span class="hsi-loader"></span> } @else { Ingresar al sistema }
+        </button>
+      </form>
+
+      <p class="hsi-footer-link">
+        ¿Problemas para acceder?
+        <a href="https://wa.me/+543804625960/?text=Hola,+solicito+asistencia" target="_blank" rel="noopener noreferrer">Contactá a soporte</a>
+      </p>
+    </section>
+  </main>
+</div>

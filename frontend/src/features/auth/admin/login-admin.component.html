@@ -1,0 +1,75 @@
+<div class="hsi-page">
+  <hsi-halftone class="hsi-halftone"></hsi-halftone>
+  <div class="hsi-blob hsi-blob--a" aria-hidden="true"></div>
+  <div class="hsi-blob hsi-blob--b" aria-hidden="true"></div>
+
+  <header class="hsi-header">
+    <div class="hsi-logos">
+      <img class="hsi-logo hsi-logo--escudo" src="assets/logos/provincia.svg" alt="Escudo de la Provincia de La Rioja" />
+      <span class="hsi-logo-sep" aria-hidden="true"></span>
+      <img class="hsi-logo hsi-logo--min" src="assets/logos/ministerio.svg" alt="Ministerio de Salud" />
+    </div>
+  </header>
+
+  <main class="hsi-main">
+    <hsi-robot-logo size="clamp(160px, 25vh, 250px)"></hsi-robot-logo>
+    
+    <h1 class="hsi-title">Acceso Administrativo</h1>
+
+    <section class="hsi-card">
+      <p class="hsi-help-text">
+        Accedé con tus credenciales de administrador para gestionar tickets, usuarios y recursos del sistema de soporte.
+      </p>
+
+      <form (submit)="onSubmit($event)">
+        
+        <!-- Campo: Usuario Admin -->
+        <label class="hsi-label" for="admin-username">Usuario Admin</label>
+        <div class="hsi-field" [class.has-error]="errorMessage() && !adminUsername">
+          <span class="material-icons hsi-i" aria-hidden="true">person</span>
+          <input
+            id="admin-username"
+            type="text"
+            name="adminUsername"
+            [(ngModel)]="adminUsername"
+            placeholder="Ingresá tu usuario admin"
+            [disabled]="isLoading()"
+            required
+          />
+        </div>
+
+        <!-- Campo: Contraseña -->
+        <label class="hsi-label" for="admin-password">Contraseña</label>
+        <div class="hsi-field" [class.has-error]="errorMessage() && !adminPassword">
+          <span class="material-icons hsi-i" aria-hidden="true">lock</span>
+          <input
+            id="admin-password"
+            type="password"
+            name="adminPassword"
+            [(ngModel)]="adminPassword"
+            placeholder="Ingresá tu contraseña"
+            [disabled]="isLoading()"
+            required
+          />
+        </div>
+
+        <!-- Mensaje de Error -->
+        @if (errorMessage()) {
+          <span class="hsi-error-msg">
+            {{ errorMessage() }}
+          </span>
+        }
+
+        <!-- Botón de Submit -->
+        <button type="submit" class="hsi-submit" [disabled]="isLoading()">
+          @if (isLoading()) {
+            <span class="hsi-loader"></span>
+          } @else {
+            Ingresar como Admin
+          }
+        </button>
+        
+      </form>
+    </section>
+  </main>
+</div>
