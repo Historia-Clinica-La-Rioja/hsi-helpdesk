@@ -1301,7 +1301,7 @@ export interface Priority {
         <div class="toast-notification" [class.chatbot-open]="isChatOpen()" (click)="goToTicketFromToast()">
           <span class="material-icons toast-icon">notifications_active</span>
           <div class="toast-content">
-            <span class="toast-title">Nueva respuesta</span>
+            <span class="toast-title">{{ toastTitle() }}</span>
             <span class="toast-text">{{ message }}</span>
           </div>
           <button class="toast-close" (click)="closeToast($event)">
@@ -4295,11 +4295,10 @@ export class TicketsTabComponent implements OnInit {
 
   activeTickets = computed(() => {
     const all = this.ticketService.tickets();
-    const archivedIds = this.archivedTicketIds();
     const role = this.currentUserRole();
     const currentUserId = this.currentUserId();
     return all.filter(t => {
-      if (t.status === 'resuelto' && archivedIds.includes(t.id)) {
+      if (t.status === 'resuelto' && this.isTicketArchived(t)) {
         if (role !== 'user') {
           return t.assigned_to !== currentUserId;
         }
@@ -4323,12 +4322,11 @@ export class TicketsTabComponent implements OnInit {
     if (role !== 'user') return [];
 
     const all = this.ticketService.tickets();
-    const archivedIds = this.archivedTicketIds();
     const isArchivedMode = this.innerViewMode() === 'archived';
 
     // Collect tags from tickets that belong to the current list view (active vs archived)
     const relevantTickets = all.filter(t => {
-      const isArchived = t.status === 'resuelto' && archivedIds.includes(t.id);
+      const isArchived = t.status === 'resuelto' && this.isTicketArchived(t);
       return isArchivedMode ? isArchived : !isArchived;
     });
 
@@ -4380,7 +4378,11 @@ export class TicketsTabComponent implements OnInit {
   lastSeenMessageTimes = signal<{ [ticketId: string]: string }>({});
   get toastMessage() { return this.ticketService.toastMessage; }
   get toastTicketId() { return this.ticketService.toastTicketId; }
+  get toastTitle() { return this.ticketService.toastTitle; }
   notifiedMessageIds = new Set<string>();
+  previousTicketsMap = new Map<string, { priority: string; status: string; assigned_to?: string; close_requested?: boolean }>();
+  isFirstLoad = true;
+  lastUserId: string | null = null;
 
   systemTags = signal<any[]>([]);
 
@@ -4530,8 +4532,7 @@ export class TicketsTabComponent implements OnInit {
     const currentUserId = this.authService.currentUser()?.id || '';
 
     if (this.innerViewMode() === 'archived') {
-      const archivedIds = this.archivedTicketIds();
-      let archivedFiltered = all.filter(t => t.status === 'resuelto' && archivedIds.includes(t.id));
+      let archivedFiltered = all.filter(t => t.status === 'resuelto' && this.isTicketArchived(t));
       if (role !== 'user') {
         archivedFiltered = archivedFiltered.filter(t => t.assigned_to === currentUserId);
       }
@@ -4772,8 +4773,8 @@ export class TicketsTabComponent implements OnInit {
     const currentUserId = this.authService.currentUser()?.id || '';
 
     if (userRole === 'user') {
-      // Regular user: any message not from 'user' is a response
-      const isResponse = lastMsg.role !== 'user';
+      // Regular user: any message not from 'user' and not from 'system' is a response
+      const isResponse = lastMsg.role !== 'user' && lastMsg.role !== 'system';
       if (!isResponse) return false;
 
       const lastSeen = this.lastSeenMessageTimes()[ticket.id];
@@ -4927,38 +4928,167 @@ export class TicketsTabComponent implements OnInit {
     effect(() => {
       const tickets = this.ticketService.tickets();
       const user = this.authService.currentUser();
-      if (!user || tickets.length === 0) return;
+      if (!user) {
+        this.previousTicketsMap.clear();
+        this.isFirstLoad = true;
+        this.lastUserId = null;
+        return;
+      }
 
+      const role = this.currentUserRole();
 
+      if (this.lastUserId !== user.id) {
+        this.previousTicketsMap.clear();
+        this.isFirstLoad = true;
+        this.lastUserId = user.id;
+      }
+
+      if (tickets.length === 0) return;
+
+      if (this.isFirstLoad) {
+        for (const t of tickets) {
+          this.previousTicketsMap.set(t.id, {
+            priority: t.priority,
+            status: t.status,
+            assigned_to: t.assigned_to,
+            close_requested: t.close_requested
+          });
+        }
+        this.isFirstLoad = false;
+        return;
+      }
 
       let hasNewNotification = false;
       let toastMsg = '';
       let toastId = '';
+      let toastType: 'mensaje' | 'prioridad' | 'agente' | 'estado' = 'mensaje';
 
       for (const t of tickets) {
-        if (this.hasUnreadResponse(t)) {
+        const prevState = this.previousTicketsMap.get(t.id);
+        let changed = false;
+
+        if (prevState) {
+          if (role === 'user') {
+            // --- USER NOTIFICATIONS ---
+            if (prevState.priority !== t.priority) {
+              toastMsg = `La prioridad del ticket "${t.title}" cambió de "${prevState.priority}" a "${t.priority}".`;
+              toastId = t.id;
+              toastType = 'prioridad';
+              hasNewNotification = true;
+              changed = true;
+            } else if (prevState.assigned_to !== t.assigned_to) {
+              const oldAgent = prevState.assigned_to ? this.getAgentName(prevState.assigned_to) : 'Ninguno';
+              const newAgent = t.assigned_to ? this.getAgentName(t.assigned_to) : 'Ninguno';
+              toastMsg = `El ticket "${t.title}" fue asignado a "${newAgent}" (antes: "${oldAgent}").`;
+              toastId = t.id;
+              toastType = 'agente';
+              hasNewNotification = true;
+              changed = true;
+            } else if (prevState.status !== t.status || prevState.close_requested !== t.close_requested) {
+              if (t.status !== 'abierto') {
+                const statusMap: { [key: string]: string } = {
+                  'en_progreso': 'En progreso',
+                  'resuelto': 'Resuelto',
+                  'transferido': 'Transferido',
+                  'reabierto': 'Reabierto'
+                };
+                const friendlyStatus = statusMap[t.status] || t.status;
+                
+                if (t.status === 'resuelto' && prevState.status !== 'resuelto') {
+                  toastMsg = `El ticket "${t.title}" ha sido resuelto.`;
+                } else if (t.close_requested && !prevState.close_requested) {
+                  toastMsg = `Solicitud de ticket resuelto: El agente propuso resolver el ticket "${t.title}".`;
+                } else if (!t.close_requested && prevState.close_requested && t.status !== 'resuelto') {
+                  toastMsg = `La propuesta de resolución para el ticket "${t.title}" fue rechazada.`;
+                } else {
+                  toastMsg = `El estado del ticket "${t.title}" cambió a "${friendlyStatus}".`;
+                }
+                toastId = t.id;
+                toastType = 'estado';
+                hasNewNotification = true;
+                changed = true;
+              }
+            }
+          } else {
+            // --- AGENT/ADMIN/OWNER NOTIFICATIONS ---
+            // 1. User approved closure (status changed to resolved)
+            if (prevState.status !== 'resuelto' && t.status === 'resuelto') {
+              toastMsg = `El usuario aprobó el cierre del ticket "${t.title}".`;
+              toastId = t.id;
+              toastType = 'estado';
+              hasNewNotification = true;
+              changed = true;
+            }
+            // 2. User rejected closure (close_requested changed from true to false and status is not resolved)
+            else if (prevState.close_requested && !t.close_requested && t.status !== 'resuelto') {
+              toastMsg = `El usuario rechazó la propuesta de resolución del ticket "${t.title}".`;
+              toastId = t.id;
+              toastType = 'estado';
+              hasNewNotification = true;
+              changed = true;
+            }
+          }
+
+          if (changed && t.messages && t.messages.length > 0) {
+            for (const msg of t.messages) {
+              this.notifiedMessageIds.add(msg.id);
+            }
+          }
+
+          // Update the tracked state
+          this.previousTicketsMap.set(t.id, {
+            priority: t.priority,
+            status: t.status,
+            assigned_to: t.assigned_to,
+            close_requested: t.close_requested
+          });
+        } else {
+          // Initialize tracking for newly arrived ticket
+          this.previousTicketsMap.set(t.id, {
+            priority: t.priority,
+            status: t.status,
+            assigned_to: t.assigned_to,
+            close_requested: t.close_requested
+          });
+        }
+
+        // If no state change occurred, check for new messages
+        if (!changed && this.hasUnreadResponse(t)) {
           const lastMsg = t.messages![t.messages!.length - 1];
-          // If we haven't notified about this message ID in this session yet, and we are not currently viewing it
           const sel = this.selectedTicket();
           const isCurrentlyViewing = sel && sel.id === t.id && this.innerViewMode() === 'detail';
 
           if (isCurrentlyViewing) {
-            // Automatically mark as read if currently viewing
             this.markTicketMessagesAsSeen(t.id, new Date(lastMsg.created_at));
           } else if (!this.notifiedMessageIds.has(lastMsg.id)) {
-            this.notifiedMessageIds.add(lastMsg.id);
-            toastMsg = `El ticket "${t.title}" tiene un nuevo mensaje.`;
-            toastId = t.id;
-            hasNewNotification = true;
+            const canNotifyMessage = (role === 'user') || (role !== 'user' && lastMsg.role === 'user');
+            if (canNotifyMessage) {
+              this.notifiedMessageIds.add(lastMsg.id);
+              if (lastMsg.role === 'system') {
+                toastMsg = lastMsg.content;
+              } else {
+                toastMsg = `El ticket "${t.title}" tiene un nuevo mensaje.`;
+              }
+              toastId = t.id;
+              toastType = 'mensaje';
+              hasNewNotification = true;
+            }
           }
         }
       }
 
       if (hasNewNotification) {
+        const titleMap = {
+          'mensaje': 'Nueva respuesta',
+          'prioridad': 'Cambio de prioridad',
+          'agente': 'Cambio de agente',
+          'estado': 'Cambio de estado'
+        };
+        this.ticketService.toastTitle.set(titleMap[toastType]);
         this.toastMessage.set(toastMsg);
         this.toastTicketId.set(toastId);
 
-        // Auto-close toast after 6 seconds
+        // Auto-close toast after 15 seconds
         setTimeout(() => {
           if (this.toastTicketId() === toastId) {
             this.toastMessage.set(null);
@@ -5113,7 +5243,7 @@ export class TicketsTabComponent implements OnInit {
 
     // para que aparezcan los nuevos tickets o cambios de estado al instante
     const user = this.authService.currentUser();
-    if (user && this.innerViewMode() === 'list') {
+    if (user) {
       this.ticketService.loadTicketsForUser(user.username);
     }
   }
@@ -5206,12 +5336,22 @@ export class TicketsTabComponent implements OnInit {
     }
   }
 
+  getTicketArchiveKey(ticket: Ticket): string {
+    const userPart = ticket.creator_email || ticket.user_id || '';
+    const titlePart = ticket.title || '';
+    const instPart = ticket.institution || '';
+    return `key_${userPart}_${titlePart}_${instPart}`.replace(/\s+/g, '_');
+  }
+
   archiveTicket(ticketId: string): void {
+    const t = this.ticketService.tickets().find(x => x.id === ticketId);
+    if (!t) return;
     const user = this.authService.currentUser();
     if (!user || !user.username) return;
+    const archiveKey = this.getTicketArchiveKey(t);
     const current = this.archivedTicketIds();
-    if (!current.includes(ticketId)) {
-      const updated = [...current, ticketId];
+    if (!current.includes(archiveKey)) {
+      const updated = [...current, archiveKey];
       this.archivedTicketIds.set(updated);
       try {
         localStorage.setItem(`hsi_archived_tickets_${user.username}`, JSON.stringify(updated));
@@ -5222,10 +5362,13 @@ export class TicketsTabComponent implements OnInit {
   }
 
   unarchiveTicket(ticketId: string): void {
+    const t = this.ticketService.tickets().find(x => x.id === ticketId);
+    if (!t) return;
     const user = this.authService.currentUser();
     if (!user || !user.username) return;
+    const archiveKey = this.getTicketArchiveKey(t);
     const current = this.archivedTicketIds();
-    const updated = current.filter(id => id !== ticketId);
+    const updated = current.filter(key => key !== archiveKey && key !== ticketId);
     this.archivedTicketIds.set(updated);
     try {
       localStorage.setItem(`hsi_archived_tickets_${user.username}`, JSON.stringify(updated));
@@ -5234,8 +5377,14 @@ export class TicketsTabComponent implements OnInit {
     }
   }
 
-  isTicketArchived(ticketId: string): boolean {
-    return this.archivedTicketIds().includes(ticketId);
+  isTicketArchived(ticketOrId: Ticket | string): boolean {
+    if (typeof ticketOrId === 'string') {
+      const t = this.ticketService.tickets().find(x => x.id === ticketOrId);
+      if (!t) return this.archivedTicketIds().includes(ticketOrId);
+      ticketOrId = t;
+    }
+    const archiveKey = this.getTicketArchiveKey(ticketOrId);
+    return this.archivedTicketIds().includes(archiveKey) || this.archivedTicketIds().includes(ticketOrId.id);
   }
 
   showError(field: string): boolean {
