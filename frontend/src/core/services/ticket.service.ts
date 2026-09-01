@@ -49,6 +49,7 @@ export class TicketService {
 
   toastMessage = signal<string | null>(null);
   toastTicketId = signal<string | null>(null);
+  toastTitle = signal<string>('Nueva respuesta');
   isChatOpen = signal<boolean>(false);
   ticketsLoaded = signal(false);
 
