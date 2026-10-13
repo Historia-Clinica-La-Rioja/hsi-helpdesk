@@ -53,25 +53,5 @@ cd ..
 
 # 5. Guardar la nueva versión para la próxima ejecución
 echo "$NEW_VERSION" > "$VERSION_FILE"
-echo "✅ Imagen v$NEW_VERSION empaquetada y subida con éxito."
-
-# 6. (Opcional) Ejecutar despliegue en la máquina virtual automáticamente
-echo ""
-read -p "¿Deseas conectarte por SSH y actualizar producción ahora? (s/n): " UPDATE_SERVER
-if [[ "$UPDATE_SERVER" == "s" || "$UPDATE_SERVER" == "S" ]]; then
-    echo "🌐 Conectando a Salud-1891..."
-    
-    # Bloque de comandos que se ejecutarán remotamente
-    ssh operador@Salud-1891 << EOF
-        cd ~/sistema-tickets
-        # Cambiar la versión vieja por la nueva en el archivo .env
-        sed -i 's/VERSION=.*/VERSION=v$NEW_VERSION/' .env
-        docker compose pull
-        docker compose up -d
-        # Limpiar imágenes viejas para que la VM no se quede sin disco
-        docker image prune -a -f
-EOF
-    echo "🎉 ¡Despliegue finalizado! Producción ya está corriendo en la v$NEW_VERSION"
-else
-    echo "📝 Proceso finalizado localmente. Recuerda actualizar tu .env en el servidor con VERSION=v$NEW_VERSION"
-fi
+echo "✅ Imagen v$NEW_VERSION empaquetada y subida a Docker Hub con éxito."
+echo "📝 Proceso local finalizado. Ingresa manualmente por SSH a la VM para actualizar el .env con \"nano .env\" y ejecutar docker compose."
