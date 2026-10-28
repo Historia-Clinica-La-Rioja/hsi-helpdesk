@@ -31,6 +31,9 @@ export interface ChatMessage {
   imports: [CommonModule, FormsModule, HsiRobotLogoComponent],
   template: `
     <div class="bot-fab-container" [class.hidden]="isOpen()" [style.bottom.px]="hasToastNotification() ? 120 : 32">
+      @if (hasUnreadMessages()) {
+        <div class="fab-unread-badge" (click)="toggleChat()">Nuevos</div>
+      }
       <button class="bot-fab animate-pulse-slow" (click)="toggleChat()" style="overflow: visible; display: flex; align-items: center; justify-content: center;">
         <hsi-robot-logo size="72px" [followMouse]="true"></hsi-robot-logo>
       </button>
@@ -85,7 +88,14 @@ export interface ChatMessage {
             </div>
           </div> 
           
-          <div class="chat-history" #scrollContainer>
+          <div class="chat-history" #scrollContainer (scroll)="onChatScroll()">
+            @if (showNewMessagesBanner()) {
+              <button type="button" class="new-messages-banner" (click)="jumpToLatestMessage()">
+                <span class="material-icons">keyboard_double_arrow_down</span>
+                Hay mensajes nuevos
+              </button>
+            }
+
             @for (msg of messages(); track msg.id) {
               <div class="message-row" [ngClass]="msg.sender">
                 
@@ -190,6 +200,25 @@ export interface ChatMessage {
       opacity: 0;
       transform: scale(0.8);
       pointer-events: none;
+    }
+
+    .fab-unread-badge {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      z-index: 2;
+      background: linear-gradient(135deg, #FFB547 0%, #F59E0B 100%);
+      color: white;
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-family: var(--font-heading);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      box-shadow: 0 8px 18px rgba(245, 158, 11, 0.35);
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
     }
 
     .bot-fab-label {
@@ -405,6 +434,33 @@ export interface ChatMessage {
       display: flex;
       flex-direction: column;
       gap: 16px;
+      position: relative;
+    }
+
+    .new-messages-banner {
+      position: sticky;
+      bottom: 12px;
+      align-self: center;
+      z-index: 2;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 999px;
+      background: var(--bot-blue);
+      color: white;
+      box-shadow: 0 8px 18px rgba(23, 100, 187, 0.24);
+      font-family: var(--font-heading);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: auto;
+      margin-bottom: 4px;
+    }
+
+    .new-messages-banner .material-icons {
+      font-size: 16px;
     }
 
     .message-row {
@@ -673,6 +729,9 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
   isTyping = signal(false);
   confirmAction = signal<'reset' | 'close' | null>(null);
   userInput = '';
+  private shouldAutoScroll = true;
+  showNewMessagesBanner = signal(false);
+  hasUnreadMessages = signal(false);
 
   messages = signal<ChatMessage[]>(this.loadSavedMessages());
 
@@ -716,13 +775,44 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
   }
 
   ngAfterViewChecked(): void {
-    this.scrollToBottom();
+    if (this.shouldAutoScroll) {
+      this.scrollToBottom();
+    }
+  }
+
+  onChatScroll(): void {
+    const el = this.scrollContainer?.nativeElement;
+    if (!el) return;
+
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const isNearBottom = distanceFromBottom < 60;
+    this.shouldAutoScroll = isNearBottom;
+
+    if (isNearBottom) {
+      this.showNewMessagesBanner.set(false);
+      this.hasUnreadMessages.set(false);
+    }
+  }
+
+  jumpToLatestMessage(): void {
+    this.shouldAutoScroll = true;
+    this.showNewMessagesBanner.set(false);
+    this.hasUnreadMessages.set(false);
+    setTimeout(() => this.scrollToBottom(), 20);
   }
 
   toggleChat(): void {
-    this.isOpen.set(!this.isOpen());
-    if (this.isOpen()) {
-      setTimeout(() => this.inputTextarea?.nativeElement?.focus(), 100);
+    const willOpen = !this.isOpen();
+    this.isOpen.set(willOpen);
+
+    if (willOpen) {
+      this.hasUnreadMessages.set(false);
+      this.showNewMessagesBanner.set(false);
+      this.shouldAutoScroll = true;
+      setTimeout(() => {
+        this.inputTextarea?.nativeElement?.focus();
+        this.scrollToBottom();
+      }, 100);
     }
   }
 
@@ -762,6 +852,9 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
         timestamp: new Date()
       }
     ]);
+    this.shouldAutoScroll = true;
+    this.showNewMessagesBanner.set(false);
+    this.hasUnreadMessages.set(false);
     this.isTyping.set(false);
   }
 
@@ -776,6 +869,7 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
     const input = this.userInput.trim();
     if (!input || this.isTyping()) return;
 
+    this.shouldAutoScroll = true;
     this.userInput = '';
     this.addMessage('user', input);
     this.isTyping.set(true);
@@ -810,6 +904,7 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
 
   selectOption(faq: any): void {
     this.failedAttempts = 0;
+    this.shouldAutoScroll = true;
 
     this.addMessage('user', faq.questions);
     this.isTyping.set(true);
@@ -823,6 +918,7 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
   }
 
   triggerEscalation(): void {
+    this.shouldAutoScroll = true;
     this.addMessage('user', 'Quiero hablar con un agente humano');
     this.isTyping.set(true);
     setTimeout(() => {
@@ -839,7 +935,14 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
       timestamp: new Date(),
       ...extra
     };
+
+    const wasUserScrollingUp = !this.shouldAutoScroll && sender !== 'user';
     this.messages.set([...this.messages(), newMsg]);
+
+    if (wasUserScrollingUp) {
+      this.showNewMessagesBanner.set(true);
+      this.hasUnreadMessages.set(true);
+    }
   }
 
   private simulateEscalation(): void {
@@ -867,11 +970,13 @@ export class ChatbotWidgetComponent implements AfterViewChecked, OnInit {
   }
 
   private scrollToBottom(): void {
-    if (this.scrollContainer) {
-      try {
-        const el = this.scrollContainer.nativeElement;
-        el.scrollTop = el.scrollHeight;
-      } catch (err) { }
+    if (!this.scrollContainer || !this.shouldAutoScroll) {
+      return;
     }
+
+    try {
+      const el = this.scrollContainer.nativeElement;
+      el.scrollTop = el.scrollHeight;
+    } catch (err) { }
   }
 }
