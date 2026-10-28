@@ -72,14 +72,19 @@ export class AuthService {
         if (res && res.status === 'success' && res.data && res.data.token) {
           const userToken = res.data.token;
           const decoded = this.decodeToken(userToken);
-          
+
           const userId = decoded ? decoded.user_id : '';
           const userRole = decoded ? decoded.role : 'user';
-          
+
+          const firstName = res.data.first_name || 'Usuario';
+          const lastName = res.data.last_name || 'HSI';
+
           const userProfile = {
             id: userId,
-            username: 'usuario_sso',
-            firstName: 'Usuario HSI',
+            username: res.data.username || 'usuario_sso',
+            firstName: firstName,
+            lastName: lastName,
+            fullName: `${firstName} ${lastName}`.trim(),
             role: userRole
           };
 
@@ -106,11 +111,17 @@ export class AuthService {
           const userToken = res.data.token;
           const decoded = this.decodeToken(userToken);
           const userId = decoded ? decoded.user_id : '';
+
+          const firstName = res.data.first_name || trimmedUser.split('@')[0];
+          const lastName = res.data.last_name || '';
+
           const userProfile = {
             id: userId,
             username: trimmedUser,
             dni: trimmedDni,
-            firstName: trimmedUser.split('@')[0],
+            firstName: firstName,
+            lastName: lastName,
+            fullName: lastName ? `${firstName} ${lastName}`.trim() : firstName,
             role: 'user'
           };
 
@@ -136,10 +147,16 @@ export class AuthService {
           const userToken = res.data.token;
           const decoded = this.decodeToken(userToken);
           const userId = decoded ? decoded.user_id : '';
+
+          const firstName = res.data.first_name || trimmedUser.split('@')[0];
+          const lastName = res.data.last_name || '';
+
           const userProfile = {
             id: userId,
             username: trimmedUser,
-            firstName: trimmedUser.split('@')[0],
+            firstName: firstName,
+            lastName: lastName,
+            fullName: lastName ? `${firstName} ${lastName}`.trim() : firstName,
             role: 'agent'
           };
 

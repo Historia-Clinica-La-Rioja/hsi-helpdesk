@@ -27,7 +27,9 @@ import { HsiRobotLogoComponent } from '../../shared/components/hsi-robot-logo/hs
     <div class="home-layout">
       <aside class="sidebar">
         <div class="sidebar-top">
-          <span class="material-icons ticket-logo" title="HSI Soporte">confirmation_number</span>
+          <div class="user-avatar-circle" [attr.data-tooltip]="(currentUserRole() === 'user' ? 'Perfil de usuario' : 'Perfil de agente') + ': ' + currentUserDisplayName()">
+            {{ currentUserInitials() }}
+          </div>
         </div>
 
         <div class="sidebar-middle">
@@ -242,9 +244,57 @@ import { HsiRobotLogoComponent } from '../../shared/components/hsi-robot-logo/hs
       margin-top: 8px;
     }
 
-    .ticket-logo {
+    .user-avatar-circle {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--color-accent-teal) 0%, #4a9ebe 100%);
       color: white;
-      font-size: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: 0.5px;
+      flex-shrink: 0;
+      position: relative;
+      cursor: default;
+      box-shadow: 0 2px 8px rgba(119, 194, 216, 0.35);
+      transition: box-shadow 0.2s ease, transform 0.2s ease;
+    }
+
+    .user-avatar-circle:hover {
+      box-shadow: 0 4px 14px rgba(119, 194, 216, 0.5);
+      transform: scale(1.05);
+    }
+
+    .user-avatar-circle::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      left: calc(100% + 12px);
+      top: 50%;
+      transform: translateY(-50%);
+      background-color: #1e1d2e;
+      color: white;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      transform: translateY(-50%) translateX(-4px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      border: 1px solid rgba(255,255,255,0.08);
+      z-index: 100;
+    }
+
+    .user-avatar-circle:hover::after {
+      opacity: 1;
+      transform: translateY(-50%) translateX(0);
     }
 
     .sidebar-middle {
@@ -785,6 +835,32 @@ export class HomeComponent {
   currentUserRole = computed(() => this.authService.currentUser()?.role || '');
   hasTickets = computed(() => this.ticketService.hasTickets());
   activeCount = computed(() => this.ticketService.activeCount());
+
+  currentUserInitials = computed(() => {
+    const user = this.authService.currentUser();
+    if (!user) return '?';
+    const firstName = user.firstName || '';
+    const lastName = user.lastName || '';
+    if (firstName && lastName) {
+      return (firstName.charAt(0) + lastName.charAt(0)).toUpperCase();
+    }
+    // Fallback: tomar las primeras 2 letras del nombre disponible
+    const name = firstName || user.username || '';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase() || '?';
+  });
+
+  currentUserDisplayName = computed(() => {
+    const user = this.authService.currentUser();
+    if (!user) return '';
+    // Preferir fullName (nombre + apellido completo desde BD), luego componer, luego username
+    if (user.fullName) return user.fullName;
+    if (user.firstName && user.lastName) return `${user.firstName} ${user.lastName}`;
+    return user.firstName || user.username || 'Usuario';
+  });
   showLogoutConfirm = signal(false);
   showAboutModal = signal(false);
 
