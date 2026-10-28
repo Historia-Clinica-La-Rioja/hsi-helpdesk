@@ -15,8 +15,8 @@ import (
 )
 
 type AuthService interface {
-	AuthenticateUser(username, role, dni, password string) (string, error)
-	AuthenticateSSO(hsiToken string, role string) (string, error) 
+	AuthenticateUser(username, role, dni, password string) (*models.User, string, error)
+	AuthenticateSSO(hsiToken string, role string) (*models.User, string, error)
 }
 
 type authService struct {
@@ -31,18 +31,18 @@ func NewAuthService(repo repositories.UserRepository, hsiApiUrl string) AuthServ
 	}
 }
 
-func (s *authService) AuthenticateSSO(base64Payload string, role string) (string, error) {
+func (s *authService) AuthenticateSSO(base64Payload string, role string) (*models.User, string, error) {
 	decodedBytes, err := base64.StdEncoding.DecodeString(base64Payload)
 	if err != nil {
 		log.Printf("❌ Error al decodificar Base64: %v", err)
-		return "", errors.New("datos de identidad inválidos")
+		return nil, "", errors.New("datos de identidad inválidos")
 	}
 
 	// 2. Parsear el JSON de HSI directamente en memoria
 	var hsiData struct {
-		ID        int    `json:"id"`
-		Username  string `json:"username"`
-		Email     string `json:"email"`
+		ID       int    `json:"id"`
+		Username string `json:"username"`
+		Email    string `json:"email"`
 		PersonDto struct {
 			FirstName            string `json:"firstName"`
 			LastName             string `json:"lastName"`
@@ -52,7 +52,7 @@ func (s *authService) AuthenticateSSO(base64Payload string, role string) (string
 
 	if err := json.Unmarshal(decodedBytes, &hsiData); err != nil {
 		log.Printf("❌ Error al parsear JSON del perfil: %v", err)
-		return "", errors.New("formato de perfil incorrecto")
+		return nil, "", errors.New("formato de perfil incorrecto")
 	}
 
 	log.Printf("✅ ¡Identidad delegada recibida! Usuario: %s %s (DNI: %s)", hsiData.PersonDto.FirstName, hsiData.PersonDto.LastName, hsiData.PersonDto.IdentificationNumber)
@@ -71,7 +71,7 @@ func (s *authService) AuthenticateSSO(base64Payload string, role string) (string
 
 	if dbErr != nil || user == nil {
 		log.Printf("El usuario no existe en la BD de tickets. Auto-aprovisionando...")
-		
+
 		firstName := hsiData.PersonDto.FirstName
 		lastName := hsiData.PersonDto.LastName
 		if firstName == "" && lastName == "" {
@@ -94,53 +94,57 @@ func (s *authService) AuthenticateSSO(base64Payload string, role string) (string
 
 		createdUser, createErr := s.userRepo.Create(&newUser)
 		if createErr != nil {
-			return "", errors.New("no se pudo registrar el usuario")
+			return nil, "", errors.New("no se pudo registrar el usuario")
 		}
 		user = createdUser
 	}
 
 	userRole := models.RoleUser
 	if user.Role == models.RoleAgent || user.Role == models.RoleOwner {
-		userRole = models.RoleUser 
+		userRole = models.RoleUser
 	} else if user.Role != "" {
 		userRole = user.Role
 	}
 
 	token, jwtErr := jwt.GenerateToken(user.ID.Hex(), userRole)
 	if jwtErr != nil {
-		return "", errors.New("error al generar el token interno")
+		return nil, "", errors.New("error al generar el token interno")
 	}
 
-	return token, nil
+	return user, token, nil
 }
 
-func (s *authService) AuthenticateUser(username, role, dni, password string) (string, error) {
+func (s *authService) AuthenticateUser(username, role, dni, password string) (*models.User, string, error) {
 	switch role {
 	case "user", "USER":
 		if dni == "" {
-			return "", errors.New("el DNI es obligatorio para acceder como usuario")
+			return nil, "", errors.New("el DNI es obligatorio para acceder como usuario")
 		}
 		user, err := s.userRepo.FindByUsernameAndDNI(username, dni)
 		if err != nil {
-			return "", errors.New("credenciales inválidas")
+			return nil, "", errors.New("credenciales inválidas")
 		}
 
-		role := user.Role
-		if role == "" {
-			role = "user"
+		userRole := user.Role
+		if userRole == "" {
+			userRole = "user"
 		}
-		return jwt.GenerateToken(user.ID.Hex(), role)
+		token, err := jwt.GenerateToken(user.ID.Hex(), userRole)
+		if err != nil {
+			return nil, "", err
+		}
+		return user, token, nil
 
 	case "agent", "AGENT":
 		if password == "" {
-			return "", errors.New("la contraseña es obligatoria para acceder como agente")
+			return nil, "", errors.New("la contraseña es obligatoria para acceder como agente")
 		}
 		user, err := s.userRepo.FindByUsername(username)
 		if err != nil {
-			return "", errors.New("credenciales inválidas")
+			return nil, "", errors.New("credenciales inválidas")
 		}
 		if user.Password == nil {
-			return "", errors.New("credenciales inválidas")
+			return nil, "", errors.New("credenciales inválidas")
 		}
 
 		storedPassword := *user.Password
@@ -149,28 +153,32 @@ func (s *authService) AuthenticateUser(username, role, dni, password string) (st
 		if isHash {
 			err = bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(password))
 			if err != nil {
-				return "", errors.New("credenciales inválidas")
+				return nil, "", errors.New("credenciales inválidas")
 			}
 		} else {
 			if storedPassword != password {
-				return "", errors.New("credenciales inválidas")
+				return nil, "", errors.New("credenciales inválidas")
 			}
 
 			// Plaintext password matches, generate hash and update database
 			newHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 			if err != nil {
-				return "", fmt.Errorf("failed to hash password: %w", err)
+				return nil, "", fmt.Errorf("failed to hash password: %w", err)
 			}
 
 			err = s.userRepo.UpdatePassword(user.ID, string(newHash))
 			if err != nil {
-				return "", fmt.Errorf("failed to update password in DB: %w", err)
+				return nil, "", fmt.Errorf("failed to update password in DB: %w", err)
 			}
 		}
 
-		return jwt.GenerateToken(user.ID.Hex(), user.Role)
+		token, err := jwt.GenerateToken(user.ID.Hex(), user.Role)
+		if err != nil {
+			return nil, "", err
+		}
+		return user, token, nil
 
 	default:
-		return "", errors.New("rol no válido")
+		return nil, "", errors.New("rol no válido")
 	}
 }

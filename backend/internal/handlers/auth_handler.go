@@ -39,13 +39,21 @@ func (h *AuthHandler) LoginHSI(c *gin.Context) {
 		return
 	}
 
-	token, err := h.authService.AuthenticateUser(req.Username, "user", req.DNI, "")
+	user, token, err := h.authService.AuthenticateUser(req.Username, "user", req.DNI, "")
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "success", "data": gin.H{"token": token}})
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data": gin.H{
+			"token":      token,
+			"first_name": user.FirstName,
+			"last_name":  user.LastName,
+			"username":   user.Username,
+		},
+	})
 }
 
 func (h *AuthHandler) LoginAgent(c *gin.Context) {
@@ -55,13 +63,21 @@ func (h *AuthHandler) LoginAgent(c *gin.Context) {
 		return
 	}
 
-	token, err := h.authService.AuthenticateUser(req.Username, "agent", "", req.Password)
+	user, token, err := h.authService.AuthenticateUser(req.Username, "agent", "", req.Password)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "success", "data": gin.H{"token": token}})
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data": gin.H{
+			"token":      token,
+			"first_name": user.FirstName,
+			"last_name":  user.LastName,
+			"username":   user.Username,
+		},
+	})
 }
 
 // POST /api/auth/login/sso
@@ -72,7 +88,7 @@ func (h *AuthHandler) LoginSSO(c *gin.Context) {
 		return
 	}
 
-	token, err := h.authService.AuthenticateSSO(req.Token, "user")
+	user, token, err := h.authService.AuthenticateSSO(req.Token, "user")
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": err.Error()})
 		return
@@ -81,7 +97,10 @@ func (h *AuthHandler) LoginSSO(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",
 		"data": gin.H{
-			"token": token,
+			"token":      token,
+			"first_name": user.FirstName,
+			"last_name":  user.LastName,
+			"username":   user.Username,
 		},
 	})
 }
