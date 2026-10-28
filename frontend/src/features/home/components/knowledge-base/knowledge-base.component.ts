@@ -1054,6 +1054,7 @@ export class KnowledgeBaseComponent implements OnInit {
     label: '',
     questions: '',
     answers: '',
+    is_active: true,
     tags: [] as string[]
   };
   tempTag = '';
@@ -1170,6 +1171,7 @@ export class KnowledgeBaseComponent implements OnInit {
       label: '',
       questions: '',
       answers: '',
+      is_active: true,
       tags: []
     };
     this.showArticleModal.set(true);
@@ -1183,6 +1185,7 @@ export class KnowledgeBaseComponent implements OnInit {
       label: faq.label,
       questions: faq.questions,
       answers: faq.answers,
+      is_active: faq.is_active,
       tags: faq.tags ? [...faq.tags] : []
     };
     this.showArticleModal.set(true);
@@ -1233,6 +1236,7 @@ export class KnowledgeBaseComponent implements OnInit {
       label,
       questions,
       answers,
+      is_active: this.formModel.is_active,
       tags: this.formModel.tags
     };
 
