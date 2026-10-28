@@ -187,11 +187,28 @@ export class AuthService {
     );
   }
 
+  private getLoginRoute(): string {
+    const storedUser = sessionStorage.getItem('hsi_user');
+    if (storedUser) {
+      try {
+        const user = JSON.parse(storedUser);
+        if (user?.role === 'agent') {
+          return '/login/admin';
+        }
+      } catch (e) {
+        // Ignorar y usar el default de usuario.
+      }
+    }
+
+    const user = this.currentUser();
+    return user?.role === 'agent' ? '/login/admin' : '/login/user';
+  }
+
   private clearSession(): void {
     sessionStorage.removeItem('hsi_token');
     sessionStorage.removeItem('hsi_user');
     this.token.set(null);
     this.currentUser.set(null);
-    this.router.navigate(['/login']);
+    this.router.navigate([this.getLoginRoute()]);
   }
 }
