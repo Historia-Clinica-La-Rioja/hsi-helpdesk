@@ -17,6 +17,7 @@ import (
 type AuthService interface {
 	AuthenticateUser(username, role, dni, password string) (*models.User, string, error)
 	AuthenticateSSO(hsiToken string, role string) (*models.User, string, error)
+	RegisterAndLoginSSO(username, dni string) (*models.User, string, error)
 }
 
 type authService struct {
@@ -38,7 +39,6 @@ func (s *authService) AuthenticateSSO(base64Payload string, role string) (*model
 		return nil, "", errors.New("datos de identidad inválidos")
 	}
 
-	// 2. Parsear el JSON de HSI directamente en memoria
 	var hsiData struct {
 		ID       int    `json:"id"`
 		Username string `json:"username"`
@@ -70,33 +70,14 @@ func (s *authService) AuthenticateSSO(base64Payload string, role string) (*model
 	}
 
 	if dbErr != nil || user == nil {
-		log.Printf("El usuario no existe en la BD de tickets. Auto-aprovisionando...")
-
-		firstName := hsiData.PersonDto.FirstName
-		lastName := hsiData.PersonDto.LastName
-		if firstName == "" && lastName == "" {
-			firstName = "Usuario"
-			lastName = "HSI"
-		}
-
-		if searchIdentifier == "" {
-			searchIdentifier = fmt.Sprintf("hsi_user_%d@hsi.local", hsiData.ID)
-		}
-
-		newUser := models.User{
+		log.Printf("El usuario %s no existe en la BD de tickets. Requiere registro completo.", searchIdentifier)
+		
+		tempUser := &models.User{
 			Username:  searchIdentifier,
-			Role:      models.RoleUser,
-			IsActive:  true,
-			FirstName: firstName,
-			LastName:  lastName,
-			DNI:       hsiData.PersonDto.IdentificationNumber,
+			FirstName: hsiData.PersonDto.FirstName,
+			LastName:  hsiData.PersonDto.LastName,
 		}
-
-		createdUser, createErr := s.userRepo.Create(&newUser)
-		if createErr != nil {
-			return nil, "", errors.New("no se pudo registrar el usuario")
-		}
-		user = createdUser
+		return tempUser, "", errors.New("usuario_no_registrado")
 	}
 
 	userRole := models.RoleUser
@@ -112,6 +93,33 @@ func (s *authService) AuthenticateSSO(base64Payload string, role string) (*model
 	}
 
 	return user, token, nil
+}
+
+func (s *authService) RegisterAndLoginSSO(username, dni string) (*models.User, string, error) {
+	log.Printf("Iniciando registro de usuario SSO faltante (Username: %s, DNI: %s)", username, dni)
+
+	newUser := models.User{
+		Username:  username,
+		Role:      models.RoleUser,
+		IsActive:  true,
+		FirstName: "Usuario",
+		LastName:  "HSI",
+		DNI:       dni,
+	}
+
+	createdUser, createErr := s.userRepo.Create(&newUser)
+	if createErr != nil {
+		log.Printf("❌ Error al registrar nuevo usuario SSO en BD: %v", createErr)
+		return nil, "", errors.New("no se pudo registrar el usuario en el sistema de tickets")
+	}
+
+	token, jwtErr := jwt.GenerateToken(createdUser.ID.Hex(), createdUser.Role)
+	if jwtErr != nil {
+		log.Printf("❌ Error al generar token interno para nuevo usuario SSO: %v", jwtErr)
+		return nil, "", errors.New("error al generar el token de inicio de sesión")
+	}
+
+	return createdUser, token, nil
 }
 
 func (s *authService) AuthenticateUser(username, role, dni, password string) (*models.User, string, error) {

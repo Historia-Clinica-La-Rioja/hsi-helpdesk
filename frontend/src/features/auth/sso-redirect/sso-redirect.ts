@@ -32,24 +32,30 @@ export class SsoRedirectComponent implements OnInit {
   private authService = inject(AuthService);
 
   ngOnInit(): void {
-    // 1. Angular lee la URL: /sso-redirect?token=...
     this.route.queryParams.subscribe(params => {
       const hsiToken = params['token'];
 
       if (hsiToken) {
-        // 2. Le pasamos el token al AuthService para que lo mande a Go
         this.authService.loginSSO(hsiToken).subscribe({
-          next: () => {
-            // 3. ¡Éxito! Go devolvió el JWT y Angular te deja pasar
-            this.router.navigate(['/home/tickets']);
+          next: (res: any) => {
+            if (res && res.status === 'requires_registration') {
+              this.router.navigate(['/login/user'], {
+                queryParams: {
+                  sso_username: res.data.username,
+                  sso_token: hsiToken 
+                }
+              });
+            } else {
+              this.router.navigate(['/home/tickets']);
+            }
           },
           error: (err) => {
             console.error('Fallo el SSO:', err);
-            this.router.navigate(['/login']);
+            this.router.navigate(['/login/user']);
           }
         });
       } else {
-        this.router.navigate(['/login']);
+        this.router.navigate(['/login/user']);
       }
     });
   }

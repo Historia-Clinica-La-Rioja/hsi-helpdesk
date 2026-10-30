@@ -52,3 +52,30 @@
     </section>
   </main>
 </div>
+
+<div class="sso-modal-overlay" *ngIf="showSsoModal()">
+  <div class="sso-modal-content">
+    <h3>Completar Perfil</h3>
+    <p>Es tu primer ingreso desde HSI. Por favor, confirma tu DNI para vincular tus tickets.</p>
+    
+    <div class="form-group">
+      <label>Usuario HSI</label>
+      <input type="text" [value]="ssoUsername()" disabled class="form-control" />
+    </div>
+
+    <div class="form-group mt-3">
+      <label>DNI</label>
+      <input type="text" [(ngModel)]="ssoDni" placeholder="Ingresa tu DNI" class="form-control" />
+    </div>
+
+    <div class="error-msg mt-2" *ngIf="errorMessage()" style="color: red; font-size: 0.9em;">
+      {{ errorMessage() }}
+    </div>
+
+    <div class="modal-actions mt-4">
+      <button (click)="onCompleteSSO()" [disabled]="isLoading()" class="btn btn-primary w-100">
+        {{ isLoading() ? 'Guardando...' : 'Guardar e Ingresar' }}
+      </button>
+    </div>
+  </div>
+</div>

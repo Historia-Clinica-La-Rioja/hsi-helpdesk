@@ -70,35 +70,53 @@ export class AuthService {
     return this.http.post<any>(`${this.apiUrl}/auth/login/sso`, { token: hsiToken }).pipe(
       tap(res => {
         if (res && res.status === 'success' && res.data && res.data.token) {
-          const userToken = res.data.token;
-          const decoded = this.decodeToken(userToken);
-
-          const userId = decoded ? decoded.user_id : '';
-          const userRole = decoded ? decoded.role : 'user';
-
-          const firstName = res.data.first_name || 'Usuario';
-          const lastName = res.data.last_name || 'HSI';
-
-          const userProfile = {
-            id: userId,
-            username: res.data.username || 'usuario_sso',
-            firstName: firstName,
-            lastName: lastName,
-            fullName: `${firstName} ${lastName}`.trim(),
-            role: userRole
-          };
-
-          sessionStorage.setItem('hsi_token', userToken);
-          sessionStorage.setItem('hsi_user', JSON.stringify(userProfile));
-
-          this.token.set(userToken);
-          this.currentUser.set(userProfile);
+          this.processSuccessfulLogin(res.data);
         }
+        
       }),
       catchError(err => {
         return throwError(() => new Error(err.error?.message || 'Error validando el token de HSI.'));
       })
     );
+  }
+
+  completeSSORegistration(username: string, dni: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/auth/login/sso/complete`, { username, dni }).pipe(
+      tap(res => {
+        if (res && res.status === 'success' && res.data && res.data.token) {
+          this.processSuccessfulLogin(res.data);
+        }
+      }),
+      catchError(err => {
+        return throwError(() => new Error(err.error?.message || 'Error al completar el registro.'));
+      })
+    );
+  }
+
+  private processSuccessfulLogin(data: any): void {
+    const userToken = data.token;
+    const decoded = this.decodeToken(userToken);
+
+    const userId = decoded ? decoded.user_id : '';
+    const userRole = decoded ? decoded.role : 'user';
+
+    const firstName = data.first_name || 'Usuario';
+    const lastName = data.last_name || 'HSI';
+
+    const userProfile = {
+      id: userId,
+      username: data.username || 'usuario_sso',
+      firstName: firstName,
+      lastName: lastName,
+      fullName: `${firstName} ${lastName}`.trim(),
+      role: userRole
+    };
+
+    sessionStorage.setItem('hsi_token', userToken);
+    sessionStorage.setItem('hsi_user', JSON.stringify(userProfile));
+
+    this.token.set(userToken);
+    this.currentUser.set(userProfile);
   }
 
   loginHSI(username: string, dni: string): Observable<any> {
