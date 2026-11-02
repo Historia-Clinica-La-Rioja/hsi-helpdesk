@@ -54,28 +54,52 @@
 </div>
 
 <div class="sso-modal-overlay" *ngIf="showSsoModal()">
-  <div class="sso-modal-content">
-    <h3>Completar Perfil</h3>
-    <p>Es tu primer ingreso desde HSI. Por favor, confirma tu DNI para vincular tus tickets.</p>
-    
-    <div class="form-group">
-      <label>Usuario HSI</label>
-      <input type="text" [value]="ssoUsername()" disabled class="form-control" />
-    </div>
+ @if (showSsoModal()) {
+  <div class="sso-modal-overlay">
+    <div class="sso-modal-content hsi-card">
+      <h2 class="hsi-title" style="font-size: 1.4rem; margin-bottom: 0.5rem; text-align: center;">Completar Perfil</h2>
+      <p class="hsi-help-text">
+        Es tu primer ingreso desde HSI. Por favor, ingresá tu email institucional y DNI para vincular tus tickets.
+      </p>
 
-    <div class="form-group mt-3">
-      <label>DNI</label>
-      <input type="text" [(ngModel)]="ssoDni" placeholder="Ingresa tu DNI" class="form-control" />
-    </div>
+      <!-- Campo de Email (editable y con diseño del sistema) -->
+      <label class="hsi-label" for="sso-email">Usuario HSI (Email)</label>
+      <div class="hsi-field" [class.has-error]="errorMessage() && !ssoUsername()">
+        <span class="material-icons hsi-i" aria-hidden="true">email</span>
+        <input 
+          id="sso-email" 
+          type="email" 
+          [ngModel]="ssoUsername()" 
+          (ngModelChange)="ssoUsername.set($event)" 
+          placeholder="usuario@salud.larioja.gob.ar" 
+          [disabled]="isLoading()" 
+          required 
+        />
+      </div>
 
-    <div class="error-msg mt-2" *ngIf="errorMessage()" style="color: red; font-size: 0.9em;">
-      {{ errorMessage() }}
-    </div>
+      <!-- Campo de DNI -->
+      <label class="hsi-label" for="sso-dni">DNI</label>
+      <div class="hsi-field" [class.has-error]="errorMessage() && !ssoDni">
+        <span class="material-icons hsi-i" aria-hidden="true">badge</span>
+        <input 
+          id="sso-dni" 
+          type="text" 
+          inputmode="numeric" 
+          [(ngModel)]="ssoDni" 
+          placeholder="Ingresá tu DNI" 
+          [disabled]="isLoading()" 
+          pattern="[0-9]*" 
+          required 
+        />
+      </div>
 
-    <div class="modal-actions mt-4">
-      <button (click)="onCompleteSSO()" [disabled]="isLoading()" class="btn btn-primary w-100">
-        {{ isLoading() ? 'Guardando...' : 'Guardar e Ingresar' }}
+      @if (errorMessage()) {
+        <span class="hsi-error-msg">{{ errorMessage() }}</span>
+      }
+
+      <button type="button" (click)="onCompleteSSO()" class="hsi-submit" style="margin-top: 1.5rem;" [disabled]="isLoading()">
+        @if (isLoading()) { <span class="hsi-loader"></span> } @else { Guardar e Ingresar }
       </button>
     </div>
   </div>
-</div>
+}

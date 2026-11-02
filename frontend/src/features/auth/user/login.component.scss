@@ -341,15 +341,14 @@
     animation: none;
   }
 }
-
 .sso-modal-overlay {
   position: fixed;
   top: 0; 
   left: 0; 
   right: 0; 
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(3px);
+  background-color: rgba(255, 255, 255, 0.4); // Fondo más sutil, alineado a tu diseño claro
+  backdrop-filter: blur(8px);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -357,31 +356,15 @@
 }
 
 .sso-modal-content {
-  background: white;
-  padding: 2rem;
-  border-radius: 12px;
+  // Hereda la apariencia de .hsi-card mediante clases en el HTML
   width: 90%;
-  max-width: 400px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-  animation: slideIn 0.3s ease-out;
-
-  h3 {
-    margin-top: 0;
-    color: #333;
-  }
-
-  p {
-    color: #666;
-    font-size: 0.95rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .mt-3 { margin-top: 1rem; }
-  .mt-4 { margin-top: 1.5rem; }
-  .w-100 { width: 100%; }
+  max-width: 380px; // Un poco más ajustado para verse como un popup
+  padding: 30px; // Padding generoso como tu card original
+  box-shadow: 0 16px 40px rgba(0,0,0,0.12);
+  animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes slideIn {
-  from { transform: translateY(-20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from { transform: translateY(15px) scale(0.98); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
 }

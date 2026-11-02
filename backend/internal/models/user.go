@@ -23,4 +23,5 @@ type User struct {
 	LastName       string             `bson:"last_name,omitempty" json:"last_name,omitempty"`
 	Specialization string             `bson:"specialization,omitempty" json:"specialization,omitempty"`
 	ActiveChats    int                `bson:"-" json:"active_chats"`
+	HSIID int `bson:"id,omitempty" json:"id"`
 }

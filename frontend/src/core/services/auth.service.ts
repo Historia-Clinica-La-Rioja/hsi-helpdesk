@@ -80,8 +80,8 @@ export class AuthService {
     );
   }
 
-  completeSSORegistration(username: string, dni: string): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/auth/login/sso/complete`, { username, dni }).pipe(
+  completeSSORegistration(username: string, dni: string, token: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/auth/login/sso/complete`, { username, dni, token }).pipe(
       tap(res => {
         if (res && res.status === 'success' && res.data && res.data.token) {
           this.processSuccessfulLogin(res.data);
@@ -92,7 +92,6 @@ export class AuthService {
       })
     );
   }
-
   private processSuccessfulLogin(data: any): void {
     const userToken = data.token;
     const decoded = this.decodeToken(userToken);

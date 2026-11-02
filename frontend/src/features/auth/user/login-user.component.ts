@@ -26,12 +26,25 @@ export class LoginUserComponent implements OnInit {
   showSsoModal = signal(false);
   ssoUsername = signal('');
   ssoDni = '';
+  pendingSsoToken = '';
 
   ngOnInit(): void {
     this.route.queryParams.subscribe(params => {
-      const token = params['token'];
-      if (token) {
-        this.handleSSOLogin(token);
+      const ssoUsername = params['sso_username'];
+      const ssoToken = params['sso_token'];
+      const directToken = params['token'];
+
+      if (ssoToken) {
+        // 🔥 Si el usuario es autogenerado (@hsi.local), lo dejamos en blanco para que escriba su email
+        const cleanUser = (ssoUsername && !ssoUsername.endsWith('@hsi.local')) ? ssoUsername : '';
+        this.ssoUsername.set(cleanUser);
+        this.pendingSsoToken = ssoToken;
+        this.showSsoModal.set(true);
+        return;
+      }
+
+      if (directToken) {
+        this.handleSSOLogin(directToken);
       }
     });
   }
@@ -46,7 +59,7 @@ export class LoginUserComponent implements OnInit {
           this.ssoUsername.set(res.data.username);
           this.showSsoModal.set(true); 
         } else {
-          this.router.navigate(['/home']); 
+          this.router.navigate(['/home/tickets']); 
         }
       },
       error: (err) => {
@@ -58,17 +71,18 @@ export class LoginUserComponent implements OnInit {
 
   onCompleteSSO(): void {
     this.errorMessage.set(null);
-    if (!this.ssoDni.trim()) {
-      this.errorMessage.set('Debes ingresar tu DNI para continuar.');
+    if (!this.ssoUsername().trim() || !this.ssoDni.trim()) {
+      this.errorMessage.set('El correo institucional y el DNI son obligatorios.');
       return;
     }
 
     this.isLoading.set(true);
-    this.authService.completeSSORegistration(this.ssoUsername(), this.ssoDni).subscribe({
+    // 🔥 Enviamos el email tipeado, el DNI y el Token
+    this.authService.completeSSORegistration(this.ssoUsername(), this.ssoDni, this.pendingSsoToken).subscribe({
       next: () => {
         this.isLoading.set(false);
         this.showSsoModal.set(false);
-        this.router.navigate(['/home']);
+        this.router.navigate(['/home/tickets']);
       },
       error: (err) => {
         this.isLoading.set(false);
@@ -76,7 +90,6 @@ export class LoginUserComponent implements OnInit {
       }
     });
   }
-
   onSubmit(event: Event): void {
     event.preventDefault();
     this.isLoading.set(true);
