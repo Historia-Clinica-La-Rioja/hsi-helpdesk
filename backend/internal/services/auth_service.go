@@ -43,6 +43,7 @@ func (s *authService) AuthenticateSSO(base64Payload string, role string) (*model
 	var hsiData struct {
 		ID        int    `json:"id"`
 		Email     string `json:"email"`
+		Username  string `json:"username"` 
 		PersonDto struct {
 			FirstName            string `json:"firstName"`
 			LastName             string `json:"lastName"`
@@ -55,27 +56,9 @@ func (s *authService) AuthenticateSSO(base64Payload string, role string) (*model
 		return nil, "", errors.New("formato de perfil incorrecto")
 	}
 
-	// log.Printf("✅ ¡Identidad delegada recibida! Usuario ID: %d", hsiData.ID)
+	log.Printf("✅ Identidad delegada recibida! Usuario ID: %d, Username: %s", hsiData.ID, hsiData.Username)
 
-	realUsername := ""
-	apiEndpoint := fmt.Sprintf("%s/users?page=0&size=1&personId=%d", s.hsiApiUrl, hsiData.ID)
-	
-	resp, errReq := http.Get(apiEndpoint)
-	if errReq == nil && resp.StatusCode == http.StatusOK {
-		var hsiResponse struct {
-			Content []struct {
-				Username string `json:"username"`
-			} `json:"content"`
-		}
-		if errDec := json.NewDecoder(resp.Body).Decode(&hsiResponse); errDec == nil {
-			if len(hsiResponse.Content) > 0 {
-				realUsername = hsiResponse.Content[0].Username 
-			}
-		}
-		resp.Body.Close()
-	}
-
-	searchIdentifier := realUsername
+	searchIdentifier := hsiData.Username
 	if searchIdentifier == "" {
 		searchIdentifier = hsiData.Email
 	}
@@ -90,7 +73,6 @@ func (s *authService) AuthenticateSSO(base64Payload string, role string) (*model
 
 	if dbErr != nil || user == nil {
 		log.Printf("El usuario %s (ID %d) no existe en BD local. Requiere registro.", searchIdentifier, hsiData.ID)
-		
 		tempUser := &models.User{
 			Username:  searchIdentifier,
 			FirstName: hsiData.PersonDto.FirstName,
@@ -113,6 +95,7 @@ func (s *authService) AuthenticateSSO(base64Payload string, role string) (*model
 
 	return user, token, nil
 }
+
 func (s *authService) RegisterAndLoginSSO(username, dni, base64Payload string) (*models.User, string, error) {
 	log.Printf("Iniciando registro de usuario SSO faltante (Username: %s, DNI: %s)", username, dni)
 
