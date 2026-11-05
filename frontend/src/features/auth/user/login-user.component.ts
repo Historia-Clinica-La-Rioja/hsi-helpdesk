@@ -29,18 +29,19 @@ export class LoginUserComponent implements OnInit {
   pendingSsoToken = '';
 
   ngOnInit(): void {
+    const navState = history.state;
+        if (navState && navState.sso_token) {
+      const ssoUsername = navState.sso_username;
+      
+      const cleanUser = (ssoUsername && !ssoUsername.endsWith('@hsi.local')) ? ssoUsername : '';
+      this.ssoUsername.set(cleanUser);
+      this.pendingSsoToken = navState.sso_token;
+      
+      this.showSsoModal.set(true);
+      return;
+    }
     this.route.queryParams.subscribe(params => {
-      const ssoUsername = params['sso_username'];
-      const ssoToken = params['sso_token'];
       const directToken = params['token'];
-
-      if (ssoToken) {
-        this.ssoUsername.set(ssoUsername || '');
-        this.pendingSsoToken = ssoToken;
-        this.showSsoModal.set(true);
-        return;
-      }
-
       if (directToken) {
         this.handleSSOLogin(directToken);
       }

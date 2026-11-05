@@ -33,73 +33,88 @@ func NewAuthService(repo repositories.UserRepository, hsiApiUrl string) AuthServ
 }
 
 func (s *authService) AuthenticateSSO(base64Payload string, role string) (*models.User, string, error) {
-    decodedBytes, err := base64.StdEncoding.DecodeString(base64Payload)
-    if err != nil {
-        log.Printf("❌ Error al decodificar Base64: %v", err)
-        return nil, "", errors.New("datos de identidad inválidos")
-    }
+	decodedBytes, err := base64.StdEncoding.DecodeString(base64Payload)
+	if err != nil {
+		log.Printf("❌ Error al decodificar Base64: %v", err)
+		return nil, "", errors.New("datos de identidad inválidos")
+	}
 
-    var hsiData struct {
-        ID       int    `json:"id"`
-        Username string `json:"username"`
-        Email    string `json:"email"`
-        PersonDto struct {
-            FirstName            string `json:"firstName"`
-            LastName             string `json:"lastName"`
-            IdentificationNumber string `json:"identificationNumber"`
-        } `json:"personDto"`
-    }
+	var hsiData struct {
+		ID        int    `json:"id"`
+		Email     string `json:"email"`
+		PersonDto struct {
+			FirstName            string `json:"firstName"`
+			LastName             string `json:"lastName"`
+			IdentificationNumber string `json:"identificationNumber"`
+		} `json:"personDto"`
+	}
 
-    if err := json.Unmarshal(decodedBytes, &hsiData); err != nil {
-        log.Printf("❌ Error al parsear JSON del perfil: %v", err)
-        return nil, "", errors.New("formato de perfil incorrecto")
-    }
+	if err := json.Unmarshal(decodedBytes, &hsiData); err != nil {
+		log.Printf("❌ Error al parsear JSON del perfil: %v", err)
+		return nil, "", errors.New("formato de perfil incorrecto")
+	}
 
-    log.Printf("✅ ¡Identidad delegada recibida! Usuario: %s %s (ID HSI: %d)", hsiData.PersonDto.FirstName, hsiData.PersonDto.LastName, hsiData.ID)
+	// log.Printf("✅ ¡Identidad delegada recibida! Usuario ID: %d", hsiData.ID)
 
-    searchIdentifier := hsiData.Username
+	realUsername := ""
+	apiEndpoint := fmt.Sprintf("%s/users?page=0&size=1&personId=%d", s.hsiApiUrl, hsiData.ID)
+	
+	resp, errReq := http.Get(apiEndpoint)
+	if errReq == nil && resp.StatusCode == http.StatusOK {
+		var hsiResponse struct {
+			Content []struct {
+				Username string `json:"username"`
+			} `json:"content"`
+		}
+		if errDec := json.NewDecoder(resp.Body).Decode(&hsiResponse); errDec == nil {
+			if len(hsiResponse.Content) > 0 {
+				realUsername = hsiResponse.Content[0].Username 
+			}
+		}
+		resp.Body.Close()
+	}
+
+	searchIdentifier := realUsername
 	if searchIdentifier == "" {
 		searchIdentifier = hsiData.Email
 	}
-    if searchIdentifier == "" {
-        searchIdentifier = fmt.Sprintf("hsi_user_%d@hsi.local", hsiData.ID)
-    }
+	if searchIdentifier == "" {
+		searchIdentifier = fmt.Sprintf("hsi_user_%d@hsi.local", hsiData.ID)
+	}
 
-    var user *models.User
-    var dbErr error
+	var user *models.User
+	var dbErr error
 
-    user, dbErr = s.userRepo.FindByHSIID(hsiData.ID)
+	user, dbErr = s.userRepo.FindByHSIID(hsiData.ID)
 
-    if dbErr != nil || user == nil {
-        log.Printf("El usuario con ID %d no existe en la BD de tickets. Requiere registro.", hsiData.ID)
-        
-        tempUser := &models.User{
-            Username:  searchIdentifier, // Se enviará el falso si vino vacío
-            FirstName: hsiData.PersonDto.FirstName,
-            LastName:  hsiData.PersonDto.LastName,
-        }
-        return tempUser, "", errors.New("usuario_no_registrado")
-    }
+	if dbErr != nil || user == nil {
+		log.Printf("El usuario %s (ID %d) no existe en BD local. Requiere registro.", searchIdentifier, hsiData.ID)
+		
+		tempUser := &models.User{
+			Username:  searchIdentifier,
+			FirstName: hsiData.PersonDto.FirstName,
+			LastName:  hsiData.PersonDto.LastName,
+		}
+		return tempUser, "", errors.New("usuario_no_registrado")
+	}
 
-    userRole := models.RoleUser
-    if user.Role == models.RoleAgent || user.Role == models.RoleOwner {
-        userRole = models.RoleUser
-    } else if user.Role != "" {
-        userRole = user.Role
-    }
+	userRole := models.RoleUser
+	if user.Role == models.RoleAgent || user.Role == models.RoleOwner {
+		userRole = models.RoleUser
+	} else if user.Role != "" {
+		userRole = user.Role
+	}
 
-    token, jwtErr := jwt.GenerateToken(user.ID.Hex(), userRole)
-    if jwtErr != nil {
-        return nil, "", errors.New("error al generar el token interno")
-    }
+	token, jwtErr := jwt.GenerateToken(user.ID.Hex(), userRole)
+	if jwtErr != nil {
+		return nil, "", errors.New("error al generar el token interno")
+	}
 
-    return user, token, nil
+	return user, token, nil
 }
-
 func (s *authService) RegisterAndLoginSSO(username, dni, base64Payload string) (*models.User, string, error) {
 	log.Printf("Iniciando registro de usuario SSO faltante (Username: %s, DNI: %s)", username, dni)
 
-	// 1. Decodificamos el token de HSI para extraer su ID real y sus nombres
 	decodedBytes, _ := base64.StdEncoding.DecodeString(base64Payload)
 	var hsiData struct {
 		ID        int `json:"id"`
@@ -110,10 +125,9 @@ func (s *authService) RegisterAndLoginSSO(username, dni, base64Payload string) (
 	}
 	json.Unmarshal(decodedBytes, &hsiData)
 
-	// 2. Crear el nuevo usuario con TODOS los datos (incluyendo el HSIID)
 	newUser := models.User{
-		HSIID:     hsiData.ID, // Esto evita que se vuelva a mostrar el popup en el futuro
-		Username:  username,   // El email institucional que el médico decida escribir
+		HSIID:     hsiData.ID,
+		Username:  username,   
 		Role:      models.RoleUser,
 		IsActive:  true,
 		FirstName: hsiData.PersonDto.FirstName,

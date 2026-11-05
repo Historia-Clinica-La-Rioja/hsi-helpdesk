@@ -40,9 +40,9 @@ export class SsoRedirectComponent implements OnInit {
           next: (res: any) => {
             if (res && res.status === 'requires_registration') {
               this.router.navigate(['/login/user'], {
-                queryParams: {
+                state: {
                   sso_username: res.data.username,
-                  sso_token: hsiToken 
+                  sso_token: hsiToken
                 }
               });
             } else {
