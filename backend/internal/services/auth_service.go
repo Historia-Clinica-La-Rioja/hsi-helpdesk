@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"strings"
 
 	"github.com/Historia-Clinica-La-Rioja/hsi-helpdesk/internal/models"
