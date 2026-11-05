@@ -35,9 +35,7 @@ export class LoginUserComponent implements OnInit {
       const directToken = params['token'];
 
       if (ssoToken) {
-        // 🔥 Si el usuario es autogenerado (@hsi.local), lo dejamos en blanco para que escriba su email
-        const cleanUser = (ssoUsername && !ssoUsername.endsWith('@hsi.local')) ? ssoUsername : '';
-        this.ssoUsername.set(cleanUser);
+        this.ssoUsername.set(ssoUsername || '');
         this.pendingSsoToken = ssoToken;
         this.showSsoModal.set(true);
         return;

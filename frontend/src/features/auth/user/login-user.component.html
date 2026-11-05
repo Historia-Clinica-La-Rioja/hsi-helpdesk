@@ -59,21 +59,18 @@
     <div class="sso-modal-content hsi-card">
       <h2 class="hsi-title" style="font-size: 1.4rem; margin-bottom: 0.5rem; text-align: center;">Completar Perfil</h2>
       <p class="hsi-help-text">
-        Es tu primer ingreso desde HSI. Por favor, ingresá tu email institucional y DNI para vincular tus tickets.
+        Es tu primer ingreso desde HSI. Por favor, confirma tu usuario de HSI y DNI para vincular tus tickets.
       </p>
 
-      <!-- Campo de Email (editable y con diseño del sistema) -->
-      <label class="hsi-label" for="sso-email">Usuario HSI (Email)</label>
-      <div class="hsi-field" [class.has-error]="errorMessage() && !ssoUsername()">
-        <span class="material-icons hsi-i" aria-hidden="true">email</span>
+      <!-- Campo de Usuario HSI (Bloqueado) -->
+      <label class="hsi-label" for="sso-email">Usuario HSI</label>
+      <div class="hsi-field" style="background-color: #f5f7f9; opacity: 0.8;">
+        <span class="material-icons hsi-i" aria-hidden="true">alternate_email</span>
         <input 
           id="sso-email" 
-          type="email" 
-          [ngModel]="ssoUsername()" 
-          (ngModelChange)="ssoUsername.set($event)" 
-          placeholder="usuario@salud.larioja.gob.ar" 
-          [disabled]="isLoading()" 
-          required 
+          type="text" 
+          [value]="ssoUsername()" 
+          disabled 
         />
       </div>
 

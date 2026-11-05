@@ -57,10 +57,10 @@ func (s *authService) AuthenticateSSO(base64Payload string, role string) (*model
 
     log.Printf("✅ ¡Identidad delegada recibida! Usuario: %s %s (ID HSI: %d)", hsiData.PersonDto.FirstName, hsiData.PersonDto.LastName, hsiData.ID)
 
-    searchIdentifier := hsiData.Email
-    if searchIdentifier == "" {
-        searchIdentifier = hsiData.Username
-    }
+    searchIdentifier := hsiData.Username
+	if searchIdentifier == "" {
+		searchIdentifier = hsiData.Email
+	}
     if searchIdentifier == "" {
         searchIdentifier = fmt.Sprintf("hsi_user_%d@hsi.local", hsiData.ID)
     }
