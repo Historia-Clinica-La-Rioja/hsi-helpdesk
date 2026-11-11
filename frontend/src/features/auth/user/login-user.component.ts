@@ -1,7 +1,7 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { HsiRobotLogoComponent } from '../../../shared/components/hsi-robot-logo/hsi-robot-logo.component';
 import { HsiHalftoneComponent } from '../../../shared/components/hsi-halftone/hsi-halftone.component';
@@ -13,15 +13,82 @@ import { HsiHalftoneComponent } from '../../../shared/components/hsi-halftone/hs
   templateUrl: './login-user.component.html',
   styleUrl: './login.component.scss' 
 })
-export class LoginUserComponent {
+export class LoginUserComponent implements OnInit {
   private authService = inject(AuthService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute); 
 
   hsiEmail = '';
   hsiDni = '';
   isLoading = signal(false);
   errorMessage = signal<string | null>(null);
 
+  showSsoModal = signal(false);
+  ssoUsername = signal('');
+  ssoDni = '';
+  pendingSsoToken = '';
+
+  ngOnInit(): void {
+    const navState = history.state;
+        if (navState && navState.sso_token) {
+      const ssoUsername = navState.sso_username;
+      
+      const cleanUser = (ssoUsername && !ssoUsername.endsWith('@hsi.local')) ? ssoUsername : '';
+      this.ssoUsername.set(cleanUser);
+      this.pendingSsoToken = navState.sso_token;
+      
+      this.showSsoModal.set(true);
+      return;
+    }
+    this.route.queryParams.subscribe(params => {
+      const directToken = params['token'];
+      if (directToken) {
+        this.handleSSOLogin(directToken);
+      }
+    });
+  }
+
+  handleSSOLogin(token: string): void {
+    this.isLoading.set(true);
+    this.authService.loginSSO(token).subscribe({
+      next: (res: any) => {
+        this.isLoading.set(false);
+        
+        if (res && res.status === 'requires_registration') {
+          this.ssoUsername.set(res.data.username);
+          this.showSsoModal.set(true); 
+        } else {
+          this.router.navigate(['/home/tickets']); 
+        }
+      },
+      error: (err) => {
+        this.isLoading.set(false);
+        this.errorMessage.set(err.message);
+      }
+    });
+  }
+
+  onCompleteSSO(): void {
+    this.errorMessage.set(null);
+    if (!this.ssoUsername().trim() || !this.ssoDni.trim()) {
+      this.errorMessage.set('El correo institucional y el DNI son obligatorios.');
+      return;
+    }
+
+    this.isLoading.set(true);
+    // 🔥 Enviamos el email tipeado, el DNI y el Token
+    this.authService.completeSSORegistration(this.ssoUsername(), this.ssoDni, this.pendingSsoToken).subscribe({
+      next: () => {
+        this.isLoading.set(false);
+        this.showSsoModal.set(false);
+        this.router.navigate(['/home/tickets']);
+      },
+      error: (err) => {
+        this.isLoading.set(false);
+        this.errorMessage.set(err.message);
+      }
+    });
+  }
   onSubmit(event: Event): void {
     event.preventDefault();
     this.isLoading.set(true);

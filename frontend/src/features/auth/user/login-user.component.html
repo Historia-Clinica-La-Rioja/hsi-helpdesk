@@ -52,3 +52,51 @@
     </section>
   </main>
 </div>
+
+<div class="sso-modal-overlay" *ngIf="showSsoModal()">
+ @if (showSsoModal()) {
+  <div class="sso-modal-overlay">
+    <div class="sso-modal-content hsi-card">
+      <h2 class="hsi-title" style="font-size: 1.4rem; margin-bottom: 0.5rem; text-align: center;">Completar Perfil</h2>
+      <p class="hsi-help-text">
+        Es tu primer ingreso desde HSI. Por favor, confirma tu usuario de HSI y DNI para vincular tus tickets.
+      </p>
+
+      <!-- Campo de Usuario HSI (Bloqueado) -->
+      <label class="hsi-label" for="sso-email">Usuario HSI</label>
+      <div class="hsi-field" style="background-color: #f5f7f9; opacity: 0.8;">
+        <span class="material-icons hsi-i" aria-hidden="true">alternate_email</span>
+        <input 
+          id="sso-email" 
+          type="text" 
+          [value]="ssoUsername()" 
+          disabled 
+        />
+      </div>
+
+      <!-- Campo de DNI -->
+      <label class="hsi-label" for="sso-dni">DNI</label>
+      <div class="hsi-field" [class.has-error]="errorMessage() && !ssoDni">
+        <span class="material-icons hsi-i" aria-hidden="true">badge</span>
+        <input 
+          id="sso-dni" 
+          type="text" 
+          inputmode="numeric" 
+          [(ngModel)]="ssoDni" 
+          placeholder="Ingresá tu DNI" 
+          [disabled]="isLoading()" 
+          pattern="[0-9]*" 
+          required 
+        />
+      </div>
+
+      @if (errorMessage()) {
+        <span class="hsi-error-msg">{{ errorMessage() }}</span>
+      }
+
+      <button type="button" (click)="onCompleteSSO()" class="hsi-submit" style="margin-top: 1.5rem;" [disabled]="isLoading()">
+        @if (isLoading()) { <span class="hsi-loader"></span> } @else { Guardar e Ingresar }
+      </button>
+    </div>
+  </div>
+}
