@@ -67,24 +67,25 @@ type DBInstitution struct {
 
 // APITicket is the populated structure returned to/received from the Angular frontend
 type APITicket struct {
-	ID          string       `json:"id"`
-	Title       string       `json:"title"`
-	Description string       `json:"description"`
-	UserID      string       `json:"user_id"`
-	Institution string       `json:"institution"`
-	Priority    string       `json:"priority"`
-	Status      string       `json:"status"`
-	Tags        []string     `json:"tags"`
-	Attachments []string     `json:"attachments"`
-	CreatedAt   time.Time    `json:"created_at"`
-	UpdatedAt   time.Time    `json:"updated_at"`
-	Messages    []APIMessage `json:"messages,omitempty"`
-	EditCount   int          `json:"editCount"`
-	AssignedTo  string       `json:"assigned_to,omitempty"`
-	ClosedAt    *time.Time   `json:"closed_at,omitempty"`
-	ResolvedAt  *time.Time   `json:"resolved_at,omitempty"`
-	ReopenedAt  *time.Time   `json:"reopened_at,omitempty"`
-	TransferReason string    `json:"transfer_reason,omitempty"`
+	ID               string       `json:"id"`
+	Title            string       `json:"title"`
+	Description      string       `json:"description"`
+	UserID           string       `json:"user_id"`
+	Institution      string       `json:"institution"`
+	Priority         string       `json:"priority"`
+	Status           string       `json:"status"`
+	Tags             []string     `json:"tags"`
+	Attachments      []string     `json:"attachments"`
+	CreatedAt        time.Time    `json:"created_at"`
+	UpdatedAt        time.Time    `json:"updated_at"`
+	Messages         []APIMessage `json:"messages,omitempty"`
+	EditCount        int          `json:"editCount"`
+	AssignedTo       string       `json:"assigned_to,omitempty"`
+	AgentName        string       `json:"agent_name,omitempty"`
+	ClosedAt         *time.Time   `json:"closed_at,omitempty"`
+	ResolvedAt       *time.Time   `json:"resolved_at,omitempty"`
+	ReopenedAt       *time.Time   `json:"reopened_at,omitempty"`
+	TransferReason   string       `json:"transfer_reason,omitempty"`
 	CloseRequested   bool         `json:"close_requested"`
 	CloseRequestedBy string       `json:"close_requested_by,omitempty"`
 	ResolvedBy       string       `json:"resolved_by,omitempty"`
@@ -99,4 +100,15 @@ type APIMessage struct {
 	Role      string    `json:"role"`
 	Content   string    `json:"content"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+type APIAgent struct {
+	ID             string `json:"id"`
+	Username       string `json:"username"`
+	Role           string `json:"role"`
+	IsActive       bool   `json:"is_active"`
+	FirstName      string `json:"first_name"`
+	LastName       string `json:"last_name"`
+	Specialization string `json:"specialization"`
+	ActiveChats    int    `json:"active_chats"`
 }

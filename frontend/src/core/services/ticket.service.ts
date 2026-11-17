@@ -35,6 +35,7 @@ export interface Ticket {
   resolved_by?: string;
   creator_name?: string;
   creator_email?: string;
+  agent_name?: string;
 }
 
 @Injectable({
