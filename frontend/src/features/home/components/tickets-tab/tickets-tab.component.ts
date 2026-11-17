@@ -521,13 +521,13 @@ export interface Priority {
                       </p>
                     }
 
-                    <!-- Assigned to Name (visible in "Todos" list if assigned to someone else) -->
-                    @if (currentUserRole() !== 'user' && ticket.assigned_to) {
-                      <div class="card-timestamp-info-row" style="color: var(--bot-blue); font-weight: 600; margin-bottom: 6px; padding: 2px 0; font-size: 12px; display: flex; align-items: center; gap: 4px;">
-                        <span class="material-icons" style="font-size: 14px; vertical-align: middle;">assignment_ind</span>
-                        <span>Asignado a: {{ getAgentName(ticket.assigned_to) }}</span>
-                      </div>
-                    }
+                   <!-- Assigned to Name (visible in "Todos" list if assigned to someone else) -->
+@if (currentUserRole() !== 'user' && ticket.assigned_to) {
+  <div class="card-timestamp-info-row" style="...">
+    <span class="material-icons" style="...">assignment_ind</span>
+    <span>Asignado a: {{ ticket.agent_name || getAgentName(ticket.assigned_to) }}</span>
+  </div>
+}
 
                     <!-- Reopened/Closed/Edited Timestamps for Admin -->
                     @if (currentUserRole() !== 'user') {
@@ -574,12 +574,12 @@ export interface Priority {
                     }
 
                     <!-- Specialist Reassigned Badge for User -->
-                    @if (currentUserRole() === 'user' && ticket.status === 'transferido' && ticket.assigned_to) {
-                      <div class="user-specialist-badge-row" style="margin-top: 8px; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: #0288D1; background-color: #E1F5FE; border: 1px solid #B3E5FC; padding: 4px 10px; border-radius: 8px; width: fit-content;">
-                        <span class="material-icons" style="font-size: 14px; color: #0288D1; vertical-align: middle;">support_agent</span>
-                        <span>Este ticket ha sido reasignado a un agente especializado -> {{ getAgentName(ticket.assigned_to) }}</span>
-                      </div>
-                    }
+@if (currentUserRole() === 'user' && ticket.status === 'transferido' && ticket.assigned_to) {
+  <div class="user-specialist-badge-row" style="...">
+    <span class="material-icons" style="...">support_agent</span>
+    <span>Este ticket ha sido reasignado a un agente especializado -> {{ ticket.agent_name || getAgentName(ticket.assigned_to) }}</span>
+  </div>
+}
                   </div>
                 </div>
               }
@@ -677,11 +677,11 @@ export interface Priority {
                     <span class="info-value">{{ ticket.created_at | date:'dd/MM/yyyy HH:mm' }}</span>
                   </div>
                   @if (ticket.assigned_to) {
-                    <div class="info-block">
-                      <span class="info-label">Asignado a</span>
-                      <span class="info-value" style="color: var(--bot-blue);">{{ getAgentName(ticket.assigned_to) }}</span>
-                    </div>
-                  }
+  <div class="info-block">
+    <span class="info-label">Asignado a</span>
+    <span class="info-value" style="color: var(--bot-blue);">{{ ticket.agent_name || getAgentName(ticket.assigned_to) }}</span>
+  </div>
+}
                   @if (ticket.status === 'reabierto' && ticket.reopened_at) {
                     <div class="info-block">
                       <span class="info-label">Reabierto</span>
@@ -775,11 +775,11 @@ export interface Priority {
                       </div>
                     </div>
                   } @else {
-                    <div class="admin-controls-card info-only" style="background: #E3F2FD; border: 1px solid #BBDEFB; padding: 15px; border-radius: 8px; color: #0D47A1; font-weight: 500; display: flex; align-items: center; gap: 8px;">
-                      <span class="material-icons">info</span>
-                      <span>Este ticket está asignado a <strong>{{ getAgentName(ticket.assigned_to) }}</strong>. Solo el agente asignado puede responder o resolver este ticket.</span>
-                    </div>
-                  }
+  <div class="admin-controls-card info-only" style="...">
+    <span class="material-icons">info</span>
+    <span>Este ticket está asignado a <strong>{{ ticket.agent_name || getAgentName(ticket.assigned_to) }}</strong>. Solo el agente asignado puede responder o resolver este ticket.</span>
+  </div>
+}
                 }
 
                 @if (ticket.attachments.length > 0) {
@@ -4993,7 +4993,7 @@ export class TicketsTabComponent implements OnInit {
                   'reabierto': 'Reabierto'
                 };
                 const friendlyStatus = statusMap[t.status] || t.status;
-                
+
                 if (t.status === 'resuelto' && prevState.status !== 'resuelto') {
                   toastMsg = `El ticket "${t.title}" ha sido resuelto.`;
                 } else if (t.close_requested && !prevState.close_requested) {
